@@ -13,7 +13,7 @@
 NUM_DECODERS=3
 EPOCHS=5000
 COUNT=1 # we need 10 models this is just to keep track which one we are on (dont forget to change the seed)
-SEED=42 # dont forget to change the seed for each model
+SEED=$COUNT # dont forget to change the seed for each model
 MODEL_NAME="ensemble_model_${NUM_DECODERS}_decoders_${COUNT}.pt"
 
 python -m venv temp_env
