@@ -27,6 +27,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs-per-geodesic", type=int, default=50, help="Optimization epochs for geodesics")
     parser.add_argument("--num-t", type=int, default=20, help="Number of points along the geodesic curve")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument("--model-name", type=str, default=None, help="Model name")
     args = parser.parse_args()
 
     print("# Options")
@@ -51,6 +52,11 @@ if __name__ == "__main__":
 
     M = args.latent_dim
 
+    if args.model_name:
+        model_name = args.model_name
+    else:
+        model_name = f"ensemble_model_{args.num_decoders}_decoders.pt"
+
     prior = GaussianPrior(M)
     decoders = [GaussianDecoder(new_decoder(M)) for _ in range(args.num_decoders)]
     encoder = GaussianEncoder(new_encoder(M))
@@ -61,10 +67,10 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
         train(model, optimizer, train_loader, args.epochs, device)
-        torch.save(model.state_dict(), os.path.join(args.experiment_folder, f"ensemble_model_{args.num_decoders}_decoders.pt"))
+        torch.save(model.state_dict(), os.path.join(args.experiment_folder, model_name))
     
     elif args.mode == "sample":
-        model.load_state_dict(torch.load(os.path.join(args.experiment_folder, f"ensemble_model_{args.num_decoders}_decoders.pt"), map_location=device))
+        model.load_state_dict(torch.load(os.path.join(args.experiment_folder, model_name), map_location=device))
         model.eval()
         with torch.no_grad():
             samples = model.sample(64).cpu()
@@ -76,7 +82,7 @@ if __name__ == "__main__":
             save_image(torch.cat([data.cpu(), recon.cpu()], dim=0), "figures/ensemble_reconstruction.png")
     
     elif args.mode == "eval":
-        model.load_state_dict(torch.load(os.path.join(args.experiment_folder, f"ensemble_model_{args.num_decoders}_decoders.pt"), map_location=device))
+        model.load_state_dict(torch.load(os.path.join(args.experiment_folder, model_name), map_location=device))
         model.eval()
         elbos = []
         with torch.no_grad():
@@ -87,7 +93,7 @@ if __name__ == "__main__":
         print("Mean test ELBO:", mean_elbo.item())
     
     elif args.mode == "geodesic":
-        model.load_state_dict(torch.load(os.path.join(args.experiment_folder, f"ensemble_model_{args.num_decoders}_decoders.pt"), map_location=device))
+        model.load_state_dict(torch.load(os.path.join(args.experiment_folder, model_name), map_location=device))
         model.eval()
         test_dataset = datasets.MNIST("data/", train=False, download=True, transform=transforms.ToTensor())
         indices = test_dataset.targets < args.num_classes
