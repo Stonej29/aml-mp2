@@ -11,7 +11,7 @@
 #BSUB -e job_logs/part_b_train_%J.err  # Error log file
 
 NUM_DECODERS=3
-EPOCHS=5000
+EPOCHS=1000
 COUNT=1 # we need 10 models this is just to keep track which one we are on (dont forget to change the seed)
 SEED=$COUNT # dont forget to change the seed for each model
 MODEL_NAME="ensemble_model_${NUM_DECODERS}_decoders_${COUNT}.pt"
