@@ -1,2 +1,4 @@
 *.pt
 __pycache__
+job_logs
+temp_env

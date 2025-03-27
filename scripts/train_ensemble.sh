@@ -6,7 +6,7 @@
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=1GB]"
 #BSUB -W 00:05
-#BSUB -u s233498@student.dtu.dk
+#BSUB -u s233498@student.dtu.dk # add youself here
 #BSUB -o job_logs/part_b_train_%J.out  # Output log file
 #BSUB -e job_logs/part_b_train_%J.err  # Error log file
 
