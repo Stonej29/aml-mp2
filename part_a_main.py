@@ -9,8 +9,6 @@ from models import GaussianPrior, GaussianEncoder, GaussianDecoder, VAE, new_enc
 from geodesics_old import plot_latent_and_geodesic_piecewise, plot_latent_and_geodesic_polynomial
 from geodesics import compute_geodesics, plot_latent_and_geodesic_piecewise
 from utils import train, subsample, encode_dataset, create_linspace
-import torch.nn as nn
-import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     # Parse arguments
@@ -101,11 +99,11 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--epochs-per-decoder",
+        "--epochs-per-geodesic",
         type=int,
         default=50,
         metavar="N",
-        help="number of training epochs per each decoder (default: %(default)s)",
+        help="number of training epochs for geodesic (default: %(default)s)",
     )
 
     parser.add_argument(
@@ -296,7 +294,7 @@ if __name__ == "__main__":
         distances = torch.zeros(linspace_points.shape[0])                                                               # placeholder for the calculated distances
 
         for i in range(linspace_points.shape[0]):
-            optimized_points[i], distances[i] = compute_geodesics(linspace_points[i], model, epochs=args.epochs_per_decoder)
+            optimized_points[i], distances[i] = compute_geodesics(linspace_points[i], model, epochs=args.epochs_per_geodesic)
 
         plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs)
 

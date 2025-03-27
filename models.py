@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.distributions as td
+import random
 
 class GaussianPrior(nn.Module):
     def __init__(self, M):
@@ -65,6 +66,40 @@ class VAE(nn.Module):
         """Compute the negative ELBO for the given batch of data."""
         return -self.elbo(x)
 
+class EnsembleVAE(nn.Module):
+    def __init__(self, prior, decoders, encoder):
+        super(EnsembleVAE, self).__init__()
+        self.prior = prior
+        self.decoders = nn.ModuleList(decoders)  
+        self.encoder = encoder
+        self.num_decoders = len(decoders)
+    
+    def forward(self, x):
+        q = self.encoder(x)
+        z = q.rsample()
+        # Sample one decoder uniformly
+        decoder_idx = random.randint(0, self.num_decoders - 1)
+        decoder = self.decoders[decoder_idx]
+        recon_distribution = decoder(z)
+
+        # elbo loss
+        loss = - (recon_distribution.log_prob(x) - q.log_prob(z) + self.prior().log_prob(z))
+        return loss.mean()
+
+    def sample(self, n_samples=1):
+        """Sample from the model using a randomly selected decoder."""
+        z = self.prior().sample(torch.Size([n_samples]))
+        decoder_idx = random.randint(0, self.num_decoders - 1)
+        decoder = self.decoders[decoder_idx]
+        return decoder(z).sample()
+    
+    def elbo(self, x):
+        """Compute the ELBO using a randomly selected decoder."""
+        q = self.encoder(x)
+        z = q.rsample()
+        decoder_idx = random.randint(0, self.num_decoders - 1)
+        decoder = self.decoders[decoder_idx]
+        return torch.mean(decoder(z).log_prob(x) - q.log_prob(z) + self.prior().log_prob(z))
 
 # Network architectures
 def new_encoder(M):
