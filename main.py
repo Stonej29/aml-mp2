@@ -6,14 +6,13 @@ from torchvision.utils import save_image
 import numpy as np
 
 from models import GaussianPrior, GaussianEncoder, GaussianDecoder, VAE, new_encoder, new_decoder
-from geodesics import plot_latent_and_geodesic_piecewise, plot_latent_and_geodesic_polynomial
-from utils import train, subsample, encode_dataset
+from geodesics_old import plot_latent_and_geodesic_piecewise, plot_latent_and_geodesic_polynomial
+from geodesics import compute_geodesics, plot_latent_and_geodesic_piecewise
+from utils import train, subsample, encode_dataset, create_linspace
+import torch.nn as nn
+import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
-    # set seed
-    torch.manual_seed(0)
-    np.random.seed(0)
-
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -85,12 +84,48 @@ if __name__ == "__main__":
         help="number of points for polynomial geodesic (default: %(default)s)",
     )
 
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        metavar="N",
+        help="seed to create reproducible results (default: %(default)s)",
+    )
+
+    parser.add_argument(
+        "--num-pairs",
+        type=int,
+        default=25,
+        metavar="N",
+        help="num pairs to plot and find geodesics for default: %(default)s)",
+    )
+
+    parser.add_argument(
+        "--epochs-per-decoder",
+        type=int,
+        default=50,
+        metavar="N",
+        help="number of training epochs per each decoder (default: %(default)s)",
+    )
+
+    parser.add_argument(
+        "--num-t",  # number of points along the curve
+        type=int,
+        default=20,
+        metavar="N",
+        help="number of points along the curve (default: %(default)s)",
+    )
+
     args = parser.parse_args()
     print("# Options")
     for key, value in sorted(vars(args).items()):
         print(key, "=", value)
 
     device = args.device
+
+    # Set seed
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
 
     # Load a subset of MNIST and create data loaders
     num_train_data = 2048
@@ -183,7 +218,7 @@ if __name__ == "__main__":
         mean_elbo = torch.tensor(elbos).mean()
         print("Print mean test elbo:", mean_elbo)
 
-    elif args.mode == "geodesic":
+    elif args.mode == "geodesic_old":
         model = VAE(
             GaussianPrior(M),
             GaussianDecoder(new_decoder(M)),
@@ -223,4 +258,45 @@ if __name__ == "__main__":
         
         latent_codes, labels = encode_dataset(model, test_loader, device)
         
-        plot_latent_and_geodesic_polynomial(model, latent_codes, labels, degree=args.poly_degree, N_points=args.num_points)
+        #plot_latent_and_geodesic_polynomial(model, latent_codes, labels, degree=args.poly_degree, N_points=args.num_points)
+        plot_latent_and_geodesic_piecewise
+
+    elif args.mode == "geodesic": # most up to date
+        np.random.seed(42)
+        torch.manual_seed(42)
+
+        model = VAE(
+            GaussianPrior(M),
+            GaussianDecoder(new_decoder(M)),
+            GaussianEncoder(new_encoder(M)),
+        ).to(device)
+        model.load_state_dict(torch.load(args.experiment_folder + "/model.pt"))
+        model.eval()
+
+        # Data loading 
+        test_dataset = datasets.MNIST("data/", train=False, download=True, transform=transforms.ToTensor())
+        indices = test_dataset.targets < num_classes
+        test_dataset.data = test_dataset.data[indices]
+        test_dataset.targets = test_dataset.targets[indices]
+        test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, shuffle=False)
+        
+        # Encode our original dataset into the latent space
+        latent_codes, labels = encode_dataset(model, test_loader, device)
+
+        random_indices = np.random.choice(len(latent_codes), args.num_pairs * 2, replace=False)
+
+        selected_latent_codes = latent_codes[random_indices] # Shape: (50, 2)
+        points = np.hstack([selected_latent_codes[:args.num_pairs, :], selected_latent_codes[args.num_pairs:, :]])  # Shape: (args.num_pairs, 4)
+        points = torch.tensor(points, dtype=torch.float32)  
+
+        linspace_points = create_linspace(points, args.num_t)                                                           # get equal spaced points from the start to end position with args.num_t points
+
+        # Define empty tensors for book keeping
+        optimized_points = torch.zeros_like(linspace_points)                                                            # placeholder for optimized results
+        distances = torch.zeros(linspace_points.shape[0])                                                               # placeholder for the calculated distances
+
+        for i in range(linspace_points.shape[0]):
+            optimized_points[i], distances[i] = compute_geodesics(linspace_points[i], model, epochs=args.epochs_per_decoder)
+
+        plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs)
+

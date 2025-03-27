@@ -1,151 +1,62 @@
-import torch
-import torch.optim as optim
 import matplotlib.pyplot as plt
+import torch
 import numpy as np
+import torch.nn as nn
 
-def polynomial_curve(t, c0, c1, weights):
-    K = weights.shape[0] + 1
-    w_K = -weights.sum(dim=0)  # shape (2,)
-    poly_term = torch.zeros_like(c0)
-    for i in range(1, K):
-        poly_term += weights[i-1] * (t ** i)
-    poly_term += w_K * (t ** K)
-    return (1 - t) * c0 + t * c1 + poly_term
+def plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, num_pairs):
+    plt.figure(figsize=(8, 8))
+    colors = [
+        "black", "red", "blue", "green", "darkorange", "purple", "cyan", "magenta", 
+        "brown", "yellow", "darkgreen", "lime", "teal", "navy", "pink", "gold", 
+        "orangered", "violet", "darkslategray", "mediumspringgreen", "cornflowerblue", 
+        "hotpink"
 
-def energy_piecewise(c0, c1, between_points, decoder_net, N_segments):
-    pts_latent = torch.cat([c0.unsqueeze(0), between_points, c1.unsqueeze(0)], dim=0)
-    decoded_pts = decoder_net(pts_latent)
-    
-    dt = 1.0 / (N_segments)# - 1) # check this with TAs
+    ]
+    colors = plt.cm.tab20(np.linspace(0, 1, num_pairs))
 
-    E = 0.0
-    for i in range(N_segments):
-        diff = decoded_pts[i+1] - decoded_pts[i]
-        E += (diff**2).sum() * dt # TODO: ask TAs, do we multiply here?
-    return E
+    with torch.no_grad():
+        op_np = optimized_points.numpy()  
+        lp_np = linspace_points.numpy()
 
-def energy_polynomial(c0, c1, weights, decoder_net, N_points):
-    t_vals = torch.linspace(0.0, 1.0, N_points)
-    dt = 1.0 / (N_points) #- 1) # check this with TAs
-    E = 0.0
-    for i in range(N_points - 1):
-        p1 = polynomial_curve(t_vals[i], c0, c1, weights)
-        p2 = polynomial_curve(t_vals[i+1], c0, c1, weights)
-        #print(p1.shape)
-        #print("unqsuzeezed", p1.unsqueeze(0).shape)
-        x1 = decoder_net(p1.unsqueeze(0))
-        x2 = decoder_net(p2.unsqueeze(0))
-        diff = x2 - x1
-        E += (diff ** 2).sum() * dt # TODO: ask TAs, do we multiply here?
-    return E
+        plt.figure()
 
-def compute_geodesic_polynomial(c0, c1, decoder_net, degree=4, N_points=50, epochs=1000, lr=0.001):
-    weights = torch.zeros(degree - 1, 2, dtype=torch.float32, requires_grad=True)
-    # so weights are w_0, ..., w_{K-1}
-    optimizer = optim.Adam([weights], lr=lr)
-    
-    decoder_net.eval()
-    for param in decoder_net.parameters():
-        param.requires_grad = False
+        plt.scatter(latent_codes[:, 0], latent_codes[:, 1], s=1, c=labels, alpha=0.5)
+        for i in range(op_np.shape[0]):
+            color = colors[i]
+            plt.plot((op_np[i, 0, 0], op_np[i, 0, -1]), (op_np[i, -1, 0], op_np[i, -1, -1]), 'o', color=color)  # Plot the start and end points
+            plt.plot(op_np[i, 0, :], op_np[i, -1, :], '-', color=color)
+            plt.plot(lp_np[i, 0, :], lp_np[i, -1, :], '--', color=color)
+                
+        plt.legend(title="Digits", loc='upper center', bbox_to_anchor=(0.5, -0.08), ncol=min(5, num_classes), fontsize=10)
+        plt.savefig(f'test.png', bbox_inches='tight', dpi=300)
+        plt.show()
 
-    for epoch in range(epochs):
+def compute_geodesics(linspace_points_path,  model, epochs):
+    learnable_points = nn.Parameter(linspace_points_path[:, 1:-1].clone(), requires_grad = True)
+    optimizer = torch.optim.LBFGS([learnable_points], lr=0.01, max_iter=20, history_size=10)                         
+    decoder_net = model.decoder.decoder_net
+
+    def closure():
         optimizer.zero_grad()
-        loss = energy_polynomial(c0, c1, weights, decoder_net, N_points)
-        loss.backward()
-        optimizer.step()
-        if epoch % 100 == 0:
-            print(f"Epoch {epoch}: Energy = {loss.item():.4f}")
-    
-    t_vals = torch.linspace(0.0, 1.0, N_points)
-    curve = torch.stack([polynomial_curve(t, c0, c1, weights) for t in t_vals])
-    return curve.detach().cpu().numpy(), weights.detach()
+        x = torch.cat(( linspace_points_path[:, 0][:, None], learnable_points, linspace_points_path[:, -1][:, None]), dim=1).T  # shape: (num_t, M) concatenate the first and last point to the learnable points and transpose to match the decoders input
 
-def compute_geodesic_piecewise(c0, c1, decoder_net, N_segments=20, epochs=100, lr=0.001):
-    xs = torch.linspace(c0[0], c1[0], N_segments+1)[1:-1]
-    ys = torch.linspace(c0[1], c1[1], N_segments+1)[1:-1]
-    init_points = torch.stack([xs, ys], dim=1)
-    between_points = init_points.clone().detach().requires_grad_(True)
-    optimizer = optim.Adam([between_points], lr=lr)
+        mean_distribution = decoder_net(x) 
+        mean_diff = mean_distribution[:-1] - mean_distribution[1:]                                                           # shape: (num_t-1, 1, 28, 28) calculate the difference 
+        norms = torch.norm(mean_diff, dim=(-1, -2))**2                                                                       # shape: (num_t-1, 1) calculate the squared norm for each latent variable
+        total_norm = torch.sum(norms, dim=0)                                                                                 # shape: (1,) the sum across the num_t-1 
 
-    decoder_net.eval()
-    for param in decoder_net.parameters():
-        param.requires_grad = False
+        total_norm.backward()  
 
-    for epoch in range(epochs):
-        optimizer.zero_grad()
-        loss = energy_piecewise(c0, c1, between_points, decoder_net, N_segments)
-        loss.backward()
-        optimizer.step()
-        if epoch % 100 == 0:
-            print(f"Epoch {epoch}, Data-space energy = {loss.item():.4f}")
-    optimized_pts = torch.cat([c0.unsqueeze(0), between_points, c1.unsqueeze(0)], dim=0)
-    return optimized_pts.detach().cpu().numpy()
+        return total_norm
 
+    # Optimize using LBFGS
+    for i in range(epochs):
+        optimizer.step(closure)  
+        if i % 10 == 0:
+            print(f"Epoch: {i}, Energy: {closure().item()}")
 
-def plot_latent_and_geodesic_piecewise(vae_model, latent_codes, labels, N_segments=10):
-    plt.figure(figsize=(8, 8))
-    #scatter = plt.scatter(latent_codes[:, 0], latent_codes[:, 1], s=10, c=labels,
-    #                      cmap="viridis", alpha=0.6, label="Latent codes")
-    #plt.colorbar(scatter, label="Digit label")
-    
-    indices = np.random.choice(latent_codes.shape[0], size=2, replace=False)
-    c0_np, c1_np = latent_codes[indices[0]], latent_codes[indices[1]]
-    c0 = torch.tensor(c0_np, dtype=torch.float32)
-    c1 = torch.tensor(c1_np, dtype=torch.float32)
-    
-    decoder_net = vae_model.decoder.decoder_net
-    geod = compute_geodesic_piecewise(c0, c1, decoder_net, N_segments=N_segments, epochs=5000, lr=0.001)
-    
-    plt.plot(geod[:, 0], geod[:, 1], '-o', color='red', linewidth=2, label="Geodesic curve")
-    plt.scatter([c0_np[0], c1_np[0]], [c0_np[1], c1_np[1]], color='black', s=50, zorder=5, label="Endpoints")
+    optimized_points = torch.cat((linspace_points_path[:, 0][:, None], learnable_points, linspace_points_path[:, -1][:, None]), dim=1)  # shape: (num_pairs, M, num_t) save the optimized points for plotting pater
+    diffs = optimized_points[:, 1:] - optimized_points[:, :-1]                                                                          # Compute differences between points
+    distances = torch.norm(diffs, dim=0).sum()                                                                                          # Compute and sum Euclidean distances
 
-    plt.scatter(latent_codes[:, 0], latent_codes[:, 1], s=1, c=labels, alpha=0.5)
-    plt.title("Geodesics in Latent Space")
-    plt.xlabel("z1")
-    plt.ylabel("z2")
-    plt.legend()
-    plt.savefig("figures/png/geod/geodesics_piecewise.png", dpi=300)
-    plt.savefig("figures/svg/geod/geodesics_piecewise.svg", dpi=300)
-    #plt.show()
-
-
-def plot_latent_and_geodesic_polynomial(vae_model, latent_codes, labels, degree=4, N_points=50):
-    plt.figure(figsize=(8, 8))
-    scatter = plt.scatter(latent_codes[:, 0], latent_codes[:, 1], s=10, c=labels,
-                          cmap="viridis", alpha=0.6, label="Latent codes")
-    plt.colorbar(scatter, label="Digit label")
-    
-    indices = np.random.choice(latent_codes.shape[0], size=2, replace=False)
-    c0_np, c1_np = latent_codes[indices[0]], latent_codes[indices[1]]
-    c0 = torch.tensor(c0_np, dtype=torch.float32)
-    c1 = torch.tensor(c1_np, dtype=torch.float32)
-    
-    decoder_net = vae_model.decoder.decoder_net
-    geod, weights = compute_geodesic_polynomial(c0, c1, decoder_net, degree=degree, N_points=N_points, epochs=1000, lr=0.001)
-    
-    #plt.plot(geod[:, 0], geod[:, 1], '-o', color='red', linewidth=2, label="Poly geodesic")
-    #plt.scatter([c0_np[0], c1_np[0]], [c0_np[1], c1_np[1]], color='black', s=50, zorder=5, label="Endpoints")
-    #plt.title("Latent Space with Polynomial Geodesic")
-    #plt.xlabel("z1")
-    #plt.ylabel("z2")
-    #plt.legend()
-    #plt.savefig("geodesic_polynomial.png", dpi=300)
-    #plt.show()
-
-    polynomial_geodesics = []
-    weights_tensor = torch.tensor(weights)
-    t_values = torch.linspace(0.0, 1.0, 100)
-    curve_points = torch.stack([polynomial_curve(t, c0, c1, weights_tensor) for t in t_values])
-    polynomial_geodesics.append(curve_points.numpy())
-
-    plt.figure(figsize=(8, 8))
-    plt.scatter(latent_codes[:, 0], latent_codes[:, 1], s=1, c=labels, alpha=0.5)
-    for i, geod in enumerate(polynomial_geodesics):
-        plt.plot(geod[:, 0], geod[:, 1], '-', color="blue", label=f'Polynomial {i+1}')
-    plt.title("Polynomial Geodesics in Latent Space")
-    plt.xlabel("z1")
-    plt.ylabel("z2")
-    plt.legend()
-    #plt.show()
-    plt.savefig("figures/png/geod/geodesic_polynomial.png", dpi=300)
-    plt.savefig("figures/svg/geod/geodesic_polynomial.svg", dpi=300)
+    return optimized_points, distances

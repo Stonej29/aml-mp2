@@ -58,3 +58,27 @@ def encode_dataset(vae_model, data_loader, device):
     latent_codes = torch.cat(all_latents, dim=0).numpy()
     labels = torch.cat(all_labels, dim=0).numpy()
     return latent_codes, labels
+
+def create_linspace(points, num_points):
+    # https://stackoverflow.com/questions/49306677/is-there-something-like-np-linspace-for-3d-lines
+    """
+    Create a linspace between start and end points in 3D using PyTorch,
+    given a single tensor where the first half are start points and the second half are end points.
+
+    Parameters:
+    - points: 2Nx3 tensor where the first N rows are start points and the last N rows are end points.
+    - num_points: Number of points to generate between start and end points.
+
+    Returns:
+    - linspace_points: Nx(num_points)x3 tensor of interpolated points.
+    """
+    N = points.shape[1] // 2
+    p1 = points[:, :N]
+    p2 = points[:, N:]
+    
+    # Create a tensor of shape (num_points, 1) with values ranging from 0 to 1
+    l1 = torch.linspace(0, 1, num_points)
+
+    # Calculate the interpolated points using broadcasting
+    linspace_points = p1[:, :, None] + (p2 - p1)[:, :, None] * l1[None, None, :]
+    return linspace_points
