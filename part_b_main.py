@@ -5,9 +5,14 @@ from torchvision import datasets, transforms
 from torchvision.utils import save_image
 import random
 import numpy as np
+import torch.nn as nn
+import torch.nn.functional as F
+import matplotlib.pyplot as plt
 
-from models import GaussianPrior, GaussianEncoder, GaussianDecoder, EnsembleVAE, new_encoder, new_decoder
+from models import GaussianPrior, GaussianEncoder, GaussianDecoder, EnsembleVAE, VAE ,new_encoder, new_decoder
 from utils import train, subsample, encode_dataset, create_linspace
+from geodesics import compute_geodesics_part_b, plot_latent_and_geodesic_piecewise, monte_carlo_ensamble_part_b
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -39,6 +44,8 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     random.seed(args.seed)
 
+    num_classes = 3
+    
     # Load a subset of MNIST data
     train_tensors = datasets.MNIST("data/", train=True, download=True,
                                    transform=transforms.Compose([transforms.ToTensor()]))
@@ -58,7 +65,7 @@ if __name__ == "__main__":
         model_name = f"ensemble_model_{args.num_decoders}_decoders.pt"
 
     prior = GaussianPrior(M)
-    decoders = [GaussianDecoder(new_decoder(M)) for _ in range(args.num_decoders)]
+    decoders = nn.ModuleList([GaussianDecoder(new_decoder(M)) for _ in range(args.num_decoders)])
     encoder = GaussianEncoder(new_encoder(M))
     model = EnsembleVAE(prior, decoders, encoder).to(device)
 
@@ -106,11 +113,28 @@ if __name__ == "__main__":
 
         points = np.hstack([selected_latent_codes[:args.num_pairs, :], selected_latent_codes[args.num_pairs:, :]])
         points = torch.tensor(points, dtype=torch.float32)
-        linspace_points = create_linspace(points, args.num_t)
+        linspace_points = create_linspace(points, args.num_t).to(device)
         optimized_points = torch.zeros_like(linspace_points)
         distances = torch.zeros(linspace_points.shape[0])
 
         # For peter
         # access list of trained decoders
-        print(model.decoders)
-        print(len(model.decoders))
+        #print(model.decoders)
+        #print(len(model.decoders))
+    
+
+        for i in range(linspace_points.shape[0]):
+            optimized_points[i], distances[i] = compute_geodesics_part_b(linspace_points[i], model.decoders, epochs=args.epochs_per_geodesic, ensemble_size=args.num_decoders, num_samples=100)
+            
+        plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs)
+
+
+###########################################################################################################
+############################ RUN THE CODE WITH THE FOLLOWING COMMANDS #####################################
+# 3 decoders
+##  python part_b_main.py geodesic   --experiment-folder ensemble_experiment --model-name ensemble_model_3_decoders_1.pt   --device cuda   --num-pairs 10   --epochs-per-geodesic 50   --num-t 20   --num-decoders 3   --latent-dim 2
+# 2 decoders
+##  python part_b_main.py geodesic   --experiment-folder ensemble_experiment --model-name ensemble_model_2_decoders_1.pt   --device cuda   --num-pairs 10   --epochs-per-geodesic 50   --num-t 20   --num-decoders 2   --latent-dim 2
+# 1 decoder
+##  python part_b_main.py geodesic   --experiment-folder ensemble_experiment --model-name ensemble_model_1_decoder_1.pt   --device cuda   --num-pairs 10   --epochs-per-geodesic 50   --num-t 20   --num-decoders 1   --latent-dim 2
+############################################################################################################
