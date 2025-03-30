@@ -1,5 +1,7 @@
 import torch
 from tqdm import tqdm
+import pandas as pd
+import os
 
 def train(model, optimizer, data_loader, epochs, device):
     """Train a VAE model."""
@@ -82,3 +84,22 @@ def create_linspace(points, num_points):
     # Calculate the interpolated points using broadcasting
     linspace_points = p1[:, :, None] + (p2 - p1)[:, :, None] * l1[None, None, :]
     return linspace_points
+
+def log_distances(distances, num_decoders, vae_id, output_path="distances_log.csv"):
+    """
+    Save each distance as a row with num_decoders and vae info.
+    """
+    if hasattr(distances, 'tolist'):
+        distances = distances.tolist()
+
+    df = pd.DataFrame({
+        "num_decoders": [num_decoders] * len(distances),
+        "vae_id": [vae_id] * len(distances),
+        "distance": distances
+    })
+
+    # Append to file or create new
+    if os.path.exists(output_path):
+        df.to_csv(output_path, mode='a', header=False, index=False)
+    else:
+        df.to_csv(output_path, index=False)

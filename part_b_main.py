@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
 from models import GaussianPrior, GaussianEncoder, GaussianDecoder, EnsembleVAE, VAE ,new_encoder, new_decoder
-from utils import train, subsample, encode_dataset, create_linspace
+from utils import train, subsample, encode_dataset, create_linspace, log_distances
 from geodesics import compute_geodesics_part_b, plot_latent_and_geodesic_piecewise_part_b
 
 
@@ -128,6 +128,9 @@ if __name__ == "__main__":
             
         plot_latent_and_geodesic_piecewise_part_b(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs)
 
+        # Saving distances for CoV
+        vae_id = args.model_name.split('_')[-1].split('.')[0]
+        log_distances(distances, args.num_decoders, vae_id)
 
 ###########################################################################################################
 ############################ RUN THE CODE WITH THE FOLLOWING COMMANDS #####################################
