@@ -79,8 +79,7 @@ def compute_geodesics(linspace_points_path,  model, epochs, patience=10, epsilon
     distances = torch.norm(diffs, dim=0).sum()                                                                                          # Compute and sum Euclidean distances
     energy = torch.tensor(current_energy)
 
-<<<<<<< HEAD
-    return optimized_points, distances
+    return optimized_points, distances, energy
 
 
 
@@ -190,6 +189,3 @@ def plot_latent_and_geodesic_piecewise_part_b(latent_codes, labels, optimized_po
     plt.savefig("figures/png/geod/ensemble_geodesics_piecewise.png", dpi=300)
     plt.savefig("figures/svg/geod/ensemble_geodesics_piecewise.svg", dpi=300)
     plt.close()
-=======
-    return optimized_points, distances, energy
->>>>>>> 754eaacd47fb762c4bdfff661d18b11cb0eda35c

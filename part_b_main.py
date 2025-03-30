@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 from models import GaussianPrior, GaussianEncoder, GaussianDecoder, EnsembleVAE, VAE ,new_encoder, new_decoder
 from utils import train, subsample, encode_dataset, create_linspace
-from geodesics import compute_geodesics_part_b, plot_latent_and_geodesic_piecewise, monte_carlo_ensamble_part_b
+from geodesics import compute_geodesics_part_b, plot_latent_and_geodesic_piecewise_part_b
 
 
 if __name__ == "__main__":
@@ -126,7 +126,7 @@ if __name__ == "__main__":
         for i in range(linspace_points.shape[0]):
             optimized_points[i], distances[i] = compute_geodesics_part_b(linspace_points[i], model.decoders, epochs=args.epochs_per_geodesic, ensemble_size=args.num_decoders, num_samples=100)
             
-        plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs)
+        plot_latent_and_geodesic_piecewise_part_b(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs)
 
 
 ###########################################################################################################
