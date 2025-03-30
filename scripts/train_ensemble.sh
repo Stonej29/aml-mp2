@@ -1,20 +1,41 @@
 #!/bin/bash
+#BSUB -J "ensemble[1-30]"
 #BSUB -q gpuv100
 #BSUB -gpu "num=1:mode=exclusive_process"
-#BSUB -J partB_train
 #BSUB -n 4
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=5GB]"
-#BSUB -W 01:00
-#BSUB -u s233498@student.dtu.dk # add youself here
-#BSUB -o job_logs/part_b_train_%J.out  # Output log file
-#BSUB -e job_logs/part_b_train_%J.err  # Error log file
+#BSUB -W 02:00
+#BSUB -B                   
+#BSUB -N
+#BSUB -u s233498@dtu.dk
+#BSUB -o job_logs/ensemble_%J_%I.out
+#BSUB -e job_logs/ensemble_%J_%I.err
 
-NUM_DECODERS=3
-EPOCHS=1000
-COUNT=1 # we need 10 models this is just to keep track which one we are on (dont forget to change the seed)
-SEED=$COUNT # dont forget to change the seed for each model
+INDEX=${LSB_JOBINDEX}
+
+if [ $INDEX -le 10 ]; then
+    NUM_DECODERS=1
+    COUNT=$INDEX
+elif [ $INDEX -le 20 ]; then
+    NUM_DECODERS=2
+    COUNT=$(($INDEX - 10))
+else
+    NUM_DECODERS=3
+    COUNT=$(($INDEX - 20))
+fi
+
+SEED=$COUNT
+
 MODEL_NAME="ensemble_model_${NUM_DECODERS}_decoders_${COUNT}.pt"
+EPOCHS=5000
+
+echo "Job Index: $INDEX"
+echo "NUM_DECODERS: $NUM_DECODERS"
+echo "COUNT: $COUNT"
+echo "SEED: $SEED"
+echo "MODEL_NAME: $MODEL_NAME"
+echo "EPOCHS: $EPOCHS"
 
 python -m venv temp_env
 source temp_env/bin/activate
@@ -27,3 +48,4 @@ python part_b_main.py train \
     --num-decoders $NUM_DECODERS \
     --seed $SEED \
     --model-name $MODEL_NAME \
+    --device cuda

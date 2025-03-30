@@ -114,6 +114,21 @@ if __name__ == "__main__":
         help="number of points along the curve (default: %(default)s)",
     )
 
+    parser.add_argument(
+        "--epsilon",  # number of points along the curve
+        type=float,
+        default=1e-5,
+        help="difference between previous energy and current energy path optimization (default: %(default)s)",
+    )
+
+    parser.add_argument(
+        "--patience",  # number of points along the curve
+        type=int,
+        default=10,
+        metavar="N",
+        help="number of times the energy is not optimized before break stopping the optimization loop (default: %(default)s)",
+    )
+
     args = parser.parse_args()
     print("# Options")
     for key, value in sorted(vars(args).items()):
@@ -292,9 +307,17 @@ if __name__ == "__main__":
         # Define empty tensors for book keeping
         optimized_points = torch.zeros_like(linspace_points)                                                            # placeholder for optimized results
         distances = torch.zeros(linspace_points.shape[0])                                                               # placeholder for the calculated distances
-
+        energies = torch.zeros(linspace_points.shape[0])  
+        
         for i in range(linspace_points.shape[0]):
-            optimized_points[i], distances[i] = compute_geodesics(linspace_points[i], model, epochs=args.epochs_per_geodesic)
+            optimized_points[i], distances[i], energies[i] = compute_geodesics(linspace_points[i], model, epochs=args.epochs_per_geodesic, patience=args.patience, epsilon=args.epsilon)
+
+        # Save results to a text file
+        with open(f"optimize_folder/results_patience{args.patience}_seed{args.seed}_num_t{args.num_t}.txt", "w") as file:
+            file.write("Distances:\n")
+            file.write(str(distances) + "\n\n")
+            file.write("Energies:\n")
+            file.write(str(energies) + "\n")
 
         plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs)
 
