@@ -20,6 +20,12 @@ EPOCHS_PER_GEODESIC=50
 NUM_T=20
 LATENT_DIM=2
 
+python -m venv temp_env
+source temp_env/bin/activate
+
+pip install --upgrade pip
+pip install -r requirements.txt
+
 # Loop over decoder counts
 for NUM_DECODERS in 1 2 3
 do
