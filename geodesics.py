@@ -101,7 +101,7 @@ def compute_geodesics_part_b(linspace_points_path, decoders, ensemble_size,
 
         
         # MONTE CARLO APPROXIMATION 
-        energy = compute_ensemble_energy_ultimate(x, decoders, ensemble_size, num_samples, seed)                                              # calculate the energy of the curve using the ensemble energy function
+        energy = monte_carlo_energy_vectorized(x, decoders, ensemble_size, num_samples, seed)                                              # calculate the energy of the curve using the ensemble energy function
         energy.backward()
         
         optimizer.step()
@@ -173,7 +173,7 @@ def monte_carlo_ensamble_part_b(curve, decoders, ensemble_size, num_samples=200,
     
     return total_energy
 
-def compute_ensemble_energy_ultimate(curve, decoders, ensemble_size, num_samples=200, seed=None):
+def monte_carlo_energy_vectorized(curve, decoders, ensemble_size, num_samples=200, seed=None):
     """
     Ultimate vectorized implementation of Monte Carlo energy computation
     with fixed random seeding for stable optimization.
