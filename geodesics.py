@@ -101,7 +101,7 @@ def compute_geodesics_part_b(linspace_points_path, decoders, ensemble_size,
 
         
         # MONTE CARLO APPROXIMATION 
-        energy = monte_carlo_ensamble_part_b(x, decoders, ensemble_size, num_samples, seed)                                              # calculate the energy of the curve using the ensemble energy function
+        energy = compute_ensemble_energy_ultimate(x, decoders, ensemble_size, num_samples, seed)                                              # calculate the energy of the curve using the ensemble energy function
         energy.backward()
         
         optimizer.step()
