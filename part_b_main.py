@@ -124,7 +124,8 @@ if __name__ == "__main__":
     
 
         for i in range(linspace_points.shape[0]):
-            optimized_points[i], distances[i] = compute_geodesics_part_b(linspace_points[i], model.decoders, epochs=args.epochs_per_geodesic, ensemble_size=args.num_decoders, num_samples=100)
+            optimized_points[i], distances[i] = compute_geodesics_part_b(linspace_points[i], model.decoders, epochs=args.epochs_per_geodesic, ensemble_size=args.num_decoders, num_samples=100, seed=args.seed)
+            print(f"Distances at step {i}: {distances[i]}")
             
         plot_latent_and_geodesic_piecewise_part_b(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs)
 

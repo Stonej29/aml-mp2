@@ -3,6 +3,10 @@ import torch
 import numpy as np
 import torch.nn as nn
 
+import torch
+
+
+
 def plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, num_pairs):
     plt.figure(figsize=(8, 8))
     colors = [
@@ -84,7 +88,7 @@ def compute_geodesics(linspace_points_path,  model, epochs, patience=10, epsilon
 
 
 def compute_geodesics_part_b(linspace_points_path, decoders, ensemble_size, 
-                          num_samples=200, epochs=100, learning_rate=0.01):
+                          num_samples=200, epochs=100, learning_rate=0.01, seed=None):
     
     learnable_points = nn.Parameter(linspace_points_path[:, 1:-1].clone(), requires_grad=True)                                          # shape: (num_pairs, num_t-2)
     
@@ -97,7 +101,7 @@ def compute_geodesics_part_b(linspace_points_path, decoders, ensemble_size,
 
         
         # MONTE CARLO APPROXIMATION 
-        energy = monte_carlo_ensamble_part_b(x, decoders, ensemble_size, num_samples)                                              # calculate the energy of the curve using the ensemble energy function
+        energy = monte_carlo_ensamble_part_b(x, decoders, ensemble_size, num_samples, seed)                                              # calculate the energy of the curve using the ensemble energy function
         energy.backward()
         
         optimizer.step()
@@ -111,19 +115,30 @@ def compute_geodesics_part_b(linspace_points_path, decoders, ensemble_size,
     
     return optimized_points, distances
 
-def monte_carlo_ensamble_part_b(curve, decoders, ensemble_size, num_samples=200):
+def monte_carlo_ensamble_part_b(curve, decoders, ensemble_size, num_samples=200, seed=None):
     N = curve.shape[-1] - 1                                       
     
     total_energy = 0.0
     
     # pregenerate indices for l and k
-    l_indices = torch.randint(0, ensemble_size, (num_samples,))
-    k_indices = torch.randint(0, ensemble_size, (num_samples,))
+        # Save and set random seed if provided
+    if seed is not None:
+        rng_state = torch.get_rng_state()
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            cuda_rng_state = torch.cuda.get_rng_state()
+            torch.cuda.manual_seed(seed)
+
     
     # For each segment of the curve (the summation from i=0 to N)
     for i in range(N):
+        l_indices = torch.randint(0, ensemble_size, (num_samples,))
+        k_indices = torch.randint(0, ensemble_size, (num_samples,))
+        #print(f"First segment {i}")
         # Get current and next points in latent space
         
+        #print(f"k_ind{k_indices}")
+        #print(f"l_ind{l_indices}")
         t_i = curve[:, i].unsqueeze(0)                              # shape: (batch_dim, D)
         t_i_next = curve[:, i+1].unsqueeze(0)                       # shape: (batch_dim, D)
         
@@ -131,6 +146,7 @@ def monte_carlo_ensamble_part_b(curve, decoders, ensemble_size, num_samples=200)
         
         
         for sample in range(num_samples):
+            #print(f"Samples {sample}")
             # select index from the pre-generated indices
             l = l_indices[sample].item()
             k = k_indices[sample].item()
@@ -156,6 +172,87 @@ def monte_carlo_ensamble_part_b(curve, decoders, ensemble_size, num_samples=200)
         total_energy += segment_energy
     
     return total_energy
+
+def compute_ensemble_energy_ultimate(curve, decoders, ensemble_size, num_samples=200, seed=None):
+    """
+    Ultimate vectorized implementation of Monte Carlo energy computation
+    with fixed random seeding for stable optimization.
+
+    Parameters
+    ----------
+    curve : torch.Tensor
+        Points along the curve in latent space, shape (2, num_points)
+    decoders : list
+        List of decoder networks
+    ensemble_size : int
+        Number of decoders to use
+    num_samples : int
+        Number of Monte Carlo samples
+    seed : int, optional
+        Random seed for stable sampling
+
+    Returns
+    -------
+    energy : torch.Tensor
+        The estimated energy of the curve
+    """
+    # Save and set random seed if provided
+    if seed is not None:
+        rng_state = torch.get_rng_state()
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            cuda_rng_state = torch.cuda.get_rng_state()
+            torch.cuda.manual_seed(seed)
+
+    # Limit to available decoders
+    ensemble_size = min(ensemble_size, len(decoders))
+    selected_decoders = decoders[:ensemble_size]
+
+    # Get number of segments
+    N = curve.shape[1] - 1
+
+    # Generate all random indices at once
+    l_indices = torch.randint(0, ensemble_size, (N, num_samples))
+    k_indices = torch.randint(0, ensemble_size, (N, num_samples))
+    
+        # Restore RNG state to avoid affecting global state
+    if seed is not None:
+        torch.set_rng_state(rng_state)
+        if torch.cuda.is_available():
+            torch.cuda.set_rng_state(cuda_rng_state)
+
+    # Prepare batched points
+    all_points = curve.transpose(0, 1)  # Shape: (num_points, latent_dim)
+
+    # Run a single point to get output shape
+    sample_out = selected_decoders[0](all_points[0:1]).mean
+    output_shape = sample_out.shape[1:]  # Exclude batch dimension
+    flattened_size = torch.prod(torch.tensor(output_shape)).item()
+
+    # Initialize tensor for all decoder outputs
+    all_outputs = torch.zeros(ensemble_size, all_points.shape[0], flattened_size, device=curve.device)
+
+    # Compute all decoder outputs for all points
+    batch_size = 64  # Adjust as needed for memory
+    for d_idx, decoder in enumerate(selected_decoders):
+        for i in range(0, all_points.shape[0], batch_size):
+            end_idx = min(i + batch_size, all_points.shape[0])
+            batch_points = all_points[i:end_idx]
+            outputs = decoder(batch_points).mean
+            all_outputs[d_idx, i:end_idx] = outputs.reshape(end_idx - i, -1)
+
+    # Compute energy values in vectorized form
+    segment_energies = torch.zeros(N, device=curve.device)
+    for i in range(N):
+        l_outputs = all_outputs[l_indices[i], i].reshape(num_samples, -1)
+        k_outputs = all_outputs[k_indices[i], i+1].reshape(num_samples, -1)
+        squared_diffs = torch.sum((l_outputs - k_outputs) ** 2, dim=1)
+        segment_energies[i] = torch.mean(squared_diffs)
+
+    total_energy = torch.sum(segment_energies)
+    return total_energy
+
+
 
 def plot_latent_and_geodesic_piecewise_part_b(latent_codes, labels, optimized_points, linspace_points, num_classes, num_pairs):
     plt.figure(figsize=(8, 8))
