@@ -85,21 +85,25 @@ def create_linspace(points, num_points):
     linspace_points = p1[:, :, None] + (p2 - p1)[:, :, None] * l1[None, None, :]
     return linspace_points
 
-def log_distances(distances, num_decoders, vae_id, output_path="distances_log.csv"):
+def log_distances(distances, euc_distances, num_decoders, vae_id, output_path="distances_log.csv"):
     """
     Save each distance as a row with num_decoders and vae info.
     """
     if hasattr(distances, 'tolist'):
         distances = distances.tolist()
+    
+    if hasattr(euc_distances, 'tolist'):
+        euc_distances = euc_distances.tolist()
 
     df = pd.DataFrame({
         "num_decoders": [num_decoders] * len(distances),
         "vae_id": [vae_id] * len(distances),
+        "euclidean_distance": euc_distances,
         "distance": distances
     })
 
     # Append to file or create new
-    if os.path.exists(output_path):
-        df.to_csv(output_path, mode='a', header=False, index=False)
+    if os.path.exists(str(len(distances)) + output_path):
+        df.to_csv(str(len(distances)) + output_path, mode='a', header=False, index=False)
     else:
-        df.to_csv(output_path, index=False)
+        df.to_csv(str(len(distances)) + output_path, index=False)

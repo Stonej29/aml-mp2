@@ -116,6 +116,12 @@ if __name__ == "__main__":
         linspace_points = create_linspace(points, args.num_t).to(device)
         optimized_points = torch.zeros_like(linspace_points)
         distances = torch.zeros(linspace_points.shape[0])
+        # Reshape back into pairs of 2D points
+        z1 = points[:, :args.latent_dim]  # shape [num_pairs, latent_dim]
+        z2 = points[:, args.latent_dim:]  # shape [num_pairs, latent_dim]
+
+        # Compute Euclidean distances
+        euc_distances = torch.norm(z1 - z2, dim=1)  # shape [num_pairs]
 
         # For peter
         # access list of trained decoders
@@ -131,7 +137,7 @@ if __name__ == "__main__":
 
         # Saving distances for CoV
         vae_id = args.model_name.split('_')[-1].split('.')[0]
-        log_distances(distances, args.num_decoders, vae_id)
+        log_distances(distances, euc_distances, args.num_decoders, vae_id)
 
 ###########################################################################################################
 ############################ RUN THE CODE WITH THE FOLLOWING COMMANDS #####################################
