@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -J "cov3d10"
+#BSUB -J "cov2d10"
 #BSUB -q gpuv100
 #BSUB -gpu "num=1:mode=exclusive_process"
 #BSUB -n 4
@@ -9,15 +9,15 @@
 #BSUB -B                   
 #BSUB -N
 #BSUB -u s243867@dtu.dk
-#BSUB -o job_logs/cov3d10_%J_%I.out
-#BSUB -e job_logs/cov3d10_%J_%I.err
+#BSUB -o job_logs/cov2d10_%J_%I.out
+#BSUB -e job_logs/cov2d10_%J_%I.err
 
 # Set shared arguments
 EXPERIMENT_FOLDER="ensemble_experiment"
 DEVICE="cuda"
 NUM_PAIRS=10
 EPOCHS_PER_GEODESIC=500
-NUM_T=20
+NUM_T=100
 LATENT_DIM=2
 
 python -m venv temp_env
@@ -30,7 +30,7 @@ pip install -r requirements.txt
 # Run 10 times for each decoder count
 for RUN_ID in {1..10}
 do
-MODEL_NAME="ensemble_model_3_decoders"
+MODEL_NAME="ensemble_model_2_decoders"
 
 MODEL_NAME="${MODEL_NAME}_${RUN_ID}.pt"
 
@@ -43,6 +43,6 @@ python part_b_main.py geodesic \
     --num-pairs "$NUM_PAIRS" \
     --epochs-per-geodesic "$EPOCHS_PER_GEODESIC" \
     --num-t "$NUM_T" \
-    --num-decoders "3" \
+    --num-decoders "2" \
     --latent-dim "$LATENT_DIM"
 done

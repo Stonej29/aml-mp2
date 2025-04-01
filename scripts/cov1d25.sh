@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -J "cov1d10"
+#BSUB -J "cov1d25"
 #BSUB -q gpuv100
 #BSUB -gpu "num=1:mode=exclusive_process"
 #BSUB -n 4
@@ -9,15 +9,15 @@
 #BSUB -B                   
 #BSUB -N
 #BSUB -u s243867@dtu.dk
-#BSUB -o job_logs/cov1d10_%J_%I.out
-#BSUB -e job_logs/cov1d10_%J_%I.err
+#BSUB -o job_logs/cov1d25_%J_%I.out
+#BSUB -e job_logs/cov1d25_%J_%I.err
 
 # Set shared arguments
 EXPERIMENT_FOLDER="ensemble_experiment"
 DEVICE="cuda"
-NUM_PAIRS=10
+NUM_PAIRS=25
 EPOCHS_PER_GEODESIC=500
-NUM_T=20
+NUM_T=100
 LATENT_DIM=2
 
 python -m venv temp_env
