@@ -103,7 +103,7 @@ def log_distances(distances, euc_distances, num_decoders, vae_id, output_path="d
     })
 
     # Append to file or create new
-    if os.path.exists(len(distances) + output_path):
-        df.to_csv(len(distances) + output_path, mode='a', header=False, index=False)
+    if os.path.exists(str(len(distances)) + output_path):
+        df.to_csv(str(len(distances)) + output_path, mode='a', header=False, index=False)
     else:
-        df.to_csv(len(distances) + output_path, index=False)
+        df.to_csv(str(len(distances)) + output_path, index=False)
