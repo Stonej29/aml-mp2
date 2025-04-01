@@ -116,7 +116,12 @@ if __name__ == "__main__":
         linspace_points = create_linspace(points, args.num_t).to(device)
         optimized_points = torch.zeros_like(linspace_points)
         distances = torch.zeros(linspace_points.shape[0])
-        euc_distances = distances.clone()
+        # Reshape back into pairs of 2D points
+        z1 = points[:, :args.latent_dim]  # shape [num_pairs, latent_dim]
+        z2 = points[:, args.latent_dim:]  # shape [num_pairs, latent_dim]
+
+        # Compute Euclidean distances
+        euc_distances = torch.norm(z1 - z2, dim=1)  # shape [num_pairs]
 
         # For peter
         # access list of trained decoders
