@@ -48,4 +48,5 @@ def plot_combined_cov(csv_path="distances_log.csv"):
     # plt.show()
 
 if __name__ == "__main__":
-    plot_combined_cov()
+    plot_combined_cov(distances_log_10.py)
+    plot_combined_cov(distances_log.py)
