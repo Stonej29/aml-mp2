@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 from models import GaussianPrior, GaussianEncoder, GaussianDecoder, EnsembleVAE, VAE ,new_encoder, new_decoder
 from utils import train, subsample, encode_dataset, create_linspace, log_distances
-from geodesics import compute_geodesics_part_b, plot_latent_and_geodesic_piecewise_part_b
+from geodesics import compute_geodesics_part_b, plot_latent_and_geodesic_piecewise_part_b, plot_latent_and_geodesic_piecewise
 
 
 if __name__ == "__main__":
@@ -133,7 +133,17 @@ if __name__ == "__main__":
             optimized_points[i], distances[i] = compute_geodesics_part_b(linspace_points[i], model.decoders, epochs=args.epochs_per_geodesic, ensemble_size=args.num_decoders, num_samples=100, seed=args.seed)
             print(f"Distances at step {i}: {distances[i]}")
             
-        plot_latent_and_geodesic_piecewise_part_b(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs)
+        #plot_latent_and_geodesic_piecewise_part_b(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs)
+        plot_latent_and_geodesic_piecewise(
+            latent_codes, 
+            labels, 
+            optimized_points, 
+            linspace_points, 
+            num_classes,
+            args.num_pairs,
+            title= f"Geodesic for Ensemble VAE - {str(args.num_decoders)} decoders",
+        )
+
 
         # Saving distances for CoV
         vae_id = args.model_name.split('_')[-1].split('.')[0]
