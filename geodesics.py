@@ -2,12 +2,14 @@ import matplotlib.pyplot as plt
 import torch
 import numpy as np
 import torch.nn as nn
+import os
 
-import torch
+import os
+import matplotlib.patheffects as pe  
 
 
 
-def plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, num_pairs):
+def plot_latent_and_geodesic_piecewise_old(latent_codes, labels, optimized_points, linspace_points, num_classes, num_pairs):
     plt.figure(figsize=(8, 8))
     colors = [
         "black", "red", "blue", "green", "darkorange", "purple", "cyan", "magenta", 
@@ -286,3 +288,177 @@ def plot_latent_and_geodesic_piecewise_part_b(latent_codes, labels, optimized_po
     plt.savefig("figures/png/geod/ensemble_geodesics_piecewise.png", dpi=300)
     plt.savefig("figures/svg/geod/ensemble_geodesics_piecewise.svg", dpi=300)
     plt.close()
+
+
+#def plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, num_pairs, title="Geodesics in Latent Space"):
+#    plt.figure(figsize=(10, 10))
+#    
+#    class_colors = ['#1f77b4', '#ff7f0e', '#2ca02c']  # Blue, Orange, Green for classes
+#    #geodesic_colors = plt.cm.viridis(np.linspace(0, 0.8, num_pairs))  # Viridis colormap for geodesics
+#    geodesic_colors = plt.cm.Set1(np.linspace(0, 1, num_pairs))  # Accent colormap for geodesics
+#
+#    #geodesic_colors = [
+#    #    "black", "red", "blue", "green", "darkorange", "purple", "cyan", "magenta", 
+#    #    "brown", "yellow", "darkgreen", "lime", "teal", "navy", "pink", "gold", 
+#    #    "orangered", "violet", "darkslategray", "mediumspringgreen", "cornflowerblue", 
+#    #    "hotpink"
+#    #]
+#
+#    op_np = optimized_points.detach().cpu().numpy() if torch.is_tensor(optimized_points) else optimized_points.numpy()
+#    lp_np = linspace_points.detach().cpu().numpy() if torch.is_tensor(linspace_points) else linspace_points.numpy()
+#    
+#    # Plot latent points with class colors
+#    for i in range(num_classes):
+#        class_mask = labels == i
+#        plt.scatter(latent_codes[class_mask, 0], latent_codes[class_mask, 1], 
+#                   s=5, c=[class_colors[i]], alpha=0.3, label=f'Class {i}')
+#    
+#    # Plot geodesics and euclidean paths
+#    for i in range(op_np.shape[0]):
+#        color = geodesic_colors[i % len(geodesic_colors)]
+#        # black color
+#        #color = 'black'
+#        
+#        # Get start and end points
+#        start_point = op_np[i, :, 0]
+#        end_point = op_np[i, :, -1]
+#        
+#        start_class = 0  
+#        end_class = 0
+#        
+#        # Find the closest point in latent_codes for start_point
+#        # this is bit hacky but its to colour the end and start points with the class of the closest point in latent space
+#        for j in range(len(latent_codes)):
+#            if np.allclose(latent_codes[j], start_point, rtol=1e-3, atol=1e-3):
+#                start_class = labels[j]
+#                break
+#                
+#        # Find the closest point in latent_codes for end_point
+#        for j in range(len(latent_codes)):
+#            if np.allclose(latent_codes[j], end_point, rtol=1e-3, atol=1e-3):
+#                end_class = labels[j]
+#                break
+#        
+#        # Plot start and end points with class colors
+#        plt.scatter([start_point[0], end_point[0]], 
+#                    [start_point[1], end_point[1]], 
+#                    s=100, 
+#                    c=[class_colors[int(start_class) % len(class_colors)], 
+#                       class_colors[int(end_class) % len(class_colors)]],
+#                    edgecolors='black', 
+#                    linewidths=1.5, 
+#                    zorder=5)
+#        
+#        # Plot geodesic path with solid line
+#        plt.plot(op_np[i, 0, :], op_np[i, 1, :], '-', 
+#                color=color, linewidth=2, zorder=4)
+#        
+#        # Plot straight line path with dashed line
+#        plt.plot(lp_np[i, 0, :], lp_np[i, 1, :], '--', 
+#                color=color, linewidth=1.5, alpha=0.7, zorder=3)
+#    
+#    # Add dummy plots for legend
+#    plt.plot([], [], '-', color='black', linewidth=2, label='Geodesic Path')
+#    plt.plot([], [], '--', color='black', linewidth=1.5, label='Euclidean Path')
+#    plt.plot([], [], 'o', color='black', markersize=8, markerfacecolor='lightgray', markeredgecolor='black', label='Start/End Points')
+#    
+#    plt.title(title, fontsize=16)
+#    plt.xlabel('z1', fontsize=14)
+#    plt.ylabel('z2', fontsize=14)
+#    
+#    plt.legend(loc='upper right', fontsize=10)
+#    
+#    #plt.grid(True, alpha=0.3)
+#    plt.tight_layout()
+#    
+#    os.makedirs("figures/png/geod", exist_ok=True)
+#    os.makedirs("figures/svg/geod", exist_ok=True)
+#    plt.savefig(f"figures/png/geod/{title}.png", dpi=300)
+#    plt.savefig(f"figures/svg/geod/{title}.svg")
+#    plt.show()
+
+
+def plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, num_pairs, title="Geodesics in Latent Space"):
+    plt.figure(figsize=(10, 10))
+    
+    # Define distinct class colors (can be adjusted)
+    class_colors = ['#1f77b4', '#ff7f0e', '#2ca02c']  # Blue, Orange, Green for classes
+    
+    geodesic_colors = plt.cm.Set1(np.linspace(0, 1, num_pairs))
+    
+    # Option 2: Use a custom list of distinct colors
+   # geodesic_colors = [
+   #     "#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00",
+   #     "#ffff33", "#a65628", "#f781bf", "#999999", "#66c2a5"
+   # ]
+    geodesic_colors = np.array(geodesic_colors)
+    
+    op_np = optimized_points.detach().cpu().numpy() if torch.is_tensor(optimized_points) else optimized_points.numpy()
+    lp_np = linspace_points.detach().cpu().numpy() if torch.is_tensor(linspace_points) else linspace_points.numpy()
+    
+    for i in range(num_classes):
+        class_mask = labels == i
+        plt.scatter(latent_codes[class_mask, 0], latent_codes[class_mask, 1], 
+                   s=5, c=[class_colors[i]], alpha=0.3, label=f'Class {i}')
+    
+    # Plot geodesics and euclidean paths
+    for i in range(op_np.shape[0]):
+        # Cycle through colors using modulus indexing
+        color = geodesic_colors[i % len(geodesic_colors)]
+        
+        start_point = op_np[i, :, 0]
+        end_point = op_np[i, :, -1]
+        
+        start_class = 0  
+        end_class = 0
+        
+        # Find the closest latent code for the start point
+        # bit hacky but its to colour the end and start points with the class of the closest point in latent space
+        for j in range(len(latent_codes)):
+            if np.allclose(latent_codes[j], start_point, rtol=1e-3, atol=1e-3):
+                start_class = labels[j]
+                break
+                
+        # Find the closest latent code for the end point
+        for j in range(len(latent_codes)):
+            if np.allclose(latent_codes[j], end_point, rtol=1e-3, atol=1e-3):
+                end_class = labels[j]
+                break
+        
+        # Plot start and end points with class colors
+        plt.scatter([start_point[0], end_point[0]], 
+                    [start_point[1], end_point[1]], 
+                    s=100, 
+                    c=[class_colors[int(start_class) % len(class_colors)], 
+                       class_colors[int(end_class) % len(class_colors)]],
+                    edgecolors='black', 
+                    linewidths=1.5, 
+                    zorder=5)
+        
+        # Plot geodesic path with a solid line and add a black outline for contrast
+        plt.plot(op_np[i, 0, :], op_np[i, 1, :], '-', 
+                 color=color, linewidth=2, zorder=4,
+                 path_effects=[pe.Stroke(linewidth=3, foreground='black'), pe.Normal()])
+        
+        # Plot straight (Euclidean) path with a dashed line (optional: add similar effects)
+        plt.plot(lp_np[i, 0, :], lp_np[i, 1, :], '--', 
+                 color=color, linewidth=1.5, alpha=0.7, zorder=3)
+    
+    # Add dummy plots for the legend
+    plt.plot([], [], '-', color='black', linewidth=2, label='Geodesic Path')
+    plt.plot([], [], '--', color='black', linewidth=1.5, label='Euclidean Path')
+    plt.plot([], [], 'o', color='black', markersize=8, markerfacecolor='lightgray', markeredgecolor='black', label='Start/End Points')
+    
+    plt.title(title, fontsize=16)
+    plt.xlabel('z1', fontsize=14)
+    plt.ylabel('z2', fontsize=14)
+    
+    plt.legend(loc='upper right', fontsize=10)
+    
+    plt.tight_layout()
+    
+    os.makedirs("figures/png/geod", exist_ok=True)
+    os.makedirs("figures/svg/geod", exist_ok=True)
+    plt.savefig(f"figures/png/geod/{title}.png", dpi=300)
+    plt.savefig(f"figures/svg/geod/{title}.svg")
+    plt.show()

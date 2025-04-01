@@ -319,5 +319,14 @@ if __name__ == "__main__":
             file.write("Energies:\n")
             file.write(str(energies) + "\n")
 
-        plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs)
+        #plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs)
+        plot_latent_and_geodesic_piecewise(
+            latent_codes, 
+            labels, 
+            optimized_points, 
+            linspace_points, 
+            num_classes,
+            args.num_pairs,
+            title= "Geodesic in Latent Space"
+        )
 
