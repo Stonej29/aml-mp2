@@ -287,11 +287,11 @@ if __name__ == "__main__":
         model.eval()
 
         # Data loading 
-        test_dataset = datasets.MNIST("data/", train=False, download=True, transform=transforms.ToTensor())
-        indices = test_dataset.targets < num_classes
-        test_dataset.data = test_dataset.data[indices]
-        test_dataset.targets = test_dataset.targets[indices]
-        test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64, shuffle=False)
+        test_tensors = datasets.MNIST("data/", train=False, download=True,
+                                    transform=transforms.Compose([transforms.ToTensor()]))
+        test_data = subsample(test_tensors.data, test_tensors.targets, num_train_data, num_classes)
+
+        test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False)
         
         # Encode our original dataset into the latent space
         latent_codes, labels = encode_dataset(model, test_loader, device)
