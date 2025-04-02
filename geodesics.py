@@ -37,53 +37,84 @@ def plot_latent_and_geodesic_piecewise_old(latent_codes, labels, optimized_point
         plt.savefig(f'test.png', bbox_inches='tight', dpi=300)
         plt.show()
 
-def compute_geodesics(linspace_points_path,  model, epochs, patience=10, epsilon=1e-5):
-    learnable_points = nn.Parameter(linspace_points_path[:, 1:-1].clone(), requires_grad = True)
-    optimizer = torch.optim.LBFGS([learnable_points], lr=0.01, max_iter=20, history_size=10)                         
-    decoder_net = model.decoder.decoder_net
+# def compute_geodesics(linspace_points_path,  model, epochs, patience=10, epsilon=1e-5):
+#     learnable_points = nn.Parameter(linspace_points_path[:, 1:-1].clone(), requires_grad = True)
+#     optimizer = torch.optim.LBFGS([learnable_points], lr=0.01, max_iter=20, history_size=10)                         
+#     decoder_net = model.decoder.decoder_net
     
+#     best_energy = float('inf')
+#     patience_counter = 0
+
+#     def closure():
+#         optimizer.zero_grad()
+#         x = torch.cat(( linspace_points_path[:, 0][:, None], learnable_points, linspace_points_path[:, -1][:, None]), dim=1).T  # shape: (num_t, M) concatenate the first and last point to the learnable points and transpose to match the decoders input
+
+#         mean_distribution = decoder_net(x) 
+#         mean_diff = mean_distribution[:-1] - mean_distribution[1:]                                                           # shape: (num_t-1, 1, 28, 28) calculate the difference 
+#         norm = torch.norm(mean_diff, dim=(-1, -2))**2                                                                       # shape: (num_t-1, 1) calculate the squared norm for each latent variable
+#         energy = torch.sum(norm, dim=0)                                                                                 # shape: (1,) the sum across the num_t-1 
+
+#         energy.backward()  
+
+#         return energy
+
+#     # Optimize using LBFGS with early stopping
+#     print('start')
+#     for i in range(epochs):
+#             optimizer.step(closure)
+#             current_energy = closure().item()
+
+#             if i % 10 == 0:
+#                 print(f"Epoch: {i}, Energy: {current_energy}")
+
+#             # Check for improvement
+#             if current_energy < best_energy - epsilon:
+#                 best_energy = current_energy
+#                 patience_counter = 0
+#             else:
+#                 patience_counter += 1
+
+#             # Early stopping condition
+#             if patience_counter >= patience:
+#                 print(f"Early stopping at epoch {i}")
+#                 break
+
+#     optimized_points = torch.cat((linspace_points_path[:, 0][:, None], learnable_points, linspace_points_path[:, -1][:, None]), dim=1)  # shape: (num_pairs, M, num_t) save the optimized points for plotting pater
+#     diffs = optimized_points[:, 1:] - optimized_points[:, :-1]                                                                          # Compute differences between points
+#     distances = torch.norm(diffs, dim=0).sum()                                                                                          # Compute and sum Euclidean distances
+#     energy = torch.tensor(current_energy)
+
+#     return optimized_points, distances, energy
+
+def compute_geodesics_Adam(linspace_points_path, model, epochs, patience=10, epsilon=1e-5, lr=0.01):
+    learnable_points = nn.Parameter(linspace_points_path[:, 1:-1].clone(), requires_grad=True)
+    optimizer = torch.optim.Adam([learnable_points], lr=lr)
+    decoder_net = model.decoder.decoder_net
+
     best_energy = float('inf')
     patience_counter = 0
-
-    def closure():
-        optimizer.zero_grad()
-        x = torch.cat(( linspace_points_path[:, 0][:, None], learnable_points, linspace_points_path[:, -1][:, None]), dim=1).T  # shape: (num_t, M) concatenate the first and last point to the learnable points and transpose to match the decoders input
-
-        mean_distribution = decoder_net(x) 
-        mean_diff = mean_distribution[:-1] - mean_distribution[1:]                                                           # shape: (num_t-1, 1, 28, 28) calculate the difference 
-        norm = torch.norm(mean_diff, dim=(-1, -2))**2                                                                       # shape: (num_t-1, 1) calculate the squared norm for each latent variable
-        energy = torch.sum(norm, dim=0)                                                                                 # shape: (1,) the sum across the num_t-1 
-
-        energy.backward()  
-
-        return energy
-
-    # Optimize using LBFGS with early stopping
+    
     print('start')
     for i in range(epochs):
-            optimizer.step(closure)
-            current_energy = closure().item()
+        optimizer.zero_grad()
+        x = torch.cat((linspace_points_path[:, 0][:, None], learnable_points, linspace_points_path[:, -1][:, None]), dim=1).T
 
-            if i % 10 == 0:
-                print(f"Epoch: {i}, Energy: {current_energy}")
+        # energy calculation
+        mean_distribution = decoder_net(x)
+        mean_diff = mean_distribution[:-1] - mean_distribution[1:]
+        norm = torch.norm(mean_diff, dim=(-1, -2))**2
+        energy = torch.sum(norm, dim=0)
 
-            # Check for improvement
-            if current_energy < best_energy - epsilon:
-                best_energy = current_energy
-                patience_counter = 0
-            else:
-                patience_counter += 1
+        energy.backward()
+        optimizer.step()
 
-            # Early stopping condition
-            if patience_counter >= patience:
-                print(f"Early stopping at epoch {i}")
-                break
+        if i % 10 == 0:
+            print(f"Epoch: {i}, Energy: {energy.item()}")
 
-
-    optimized_points = torch.cat((linspace_points_path[:, 0][:, None], learnable_points, linspace_points_path[:, -1][:, None]), dim=1)  # shape: (num_pairs, M, num_t) save the optimized points for plotting pater
-    diffs = optimized_points[:, 1:] - optimized_points[:, :-1]                                                                          # Compute differences between points
-    distances = torch.norm(diffs, dim=0).sum()                                                                                          # Compute and sum Euclidean distances
-    energy = torch.tensor(current_energy)
+    optimized_points = torch.cat((linspace_points_path[:, 0][:, None], learnable_points, linspace_points_path[:, -1][:, None]), dim=1)
+    diffs = optimized_points[:, 1:] - optimized_points[:, :-1]
+    distances = torch.norm(diffs, dim=0).sum()
+    energy = torch.tensor(energy.item())
 
     return optimized_points, distances, energy
 
