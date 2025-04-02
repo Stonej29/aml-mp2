@@ -299,7 +299,7 @@ if __name__ == "__main__":
         energies = torch.zeros(linspace_points.shape[0])  
         
         for i in range(linspace_points.shape[0]):
-            optimized_points[i], distances[i], energies[i] = compute_geodesics_Adam(linspace_points[i], model, args.epochs_per_geodesic, args.lr) #(linspace_points_path, model, epochs, lr=0.01)
+            optimized_points[i], distances[i], energies[i] = compute_geodesics_Adam(linspace_points[i], model, args.epochs_per_geodesic, args.lr) 
 
         # # Save results to a text file
         # os.makedirs('optimize_folder', exist_ok=True)
