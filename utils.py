@@ -1,7 +1,7 @@
 import torch
 from tqdm import tqdm
 
-def train(model, optimizer, data_loader, epochs, device):
+def train(model, optimizer, data_loader, epochs, device, noise):
     """Train a VAE model."""
     num_steps = len(data_loader) * epochs
     epoch = 0
@@ -14,7 +14,8 @@ def train(model, optimizer, data_loader, epochs, device):
         for step in pbar:
             try:
                 x = next(iter(data_loader))[0]
-                x = noise(x.to(device))
+                if noise == 'true':
+                    x = noise(x.to(device))
                 optimizer.zero_grad()
                 loss = model(x)
                 loss.backward()

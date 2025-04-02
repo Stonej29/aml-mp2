@@ -7,7 +7,7 @@ import numpy as np
 
 from models import GaussianPrior, GaussianEncoder, GaussianDecoder, VAE, new_encoder, new_decoder
 from geodesics_old import plot_latent_and_geodesic_piecewise, plot_latent_and_geodesic_polynomial
-from geodesics import compute_geodesics, plot_latent_and_geodesic_piecewise
+from geodesics import compute_geodesics_LBFGS, compute_geodesics_Adam, plot_latent_and_geodesic_piecewise
 from utils import train, subsample, encode_dataset, create_linspace
 
 if __name__ == "__main__":
@@ -129,6 +129,23 @@ if __name__ == "__main__":
         help="number of times the energy is not optimized before break stopping the optimization loop (default: %(default)s)",
     )
 
+    parser.add_argument(
+        "--optimizer",  # number of points along the curve
+        type=str,
+        default='adam',
+        metavar="N",
+        help="the used optimizer (default: %(default)s)",
+    )
+
+    
+    parser.add_argument(
+        "--noise",  # number of points along the curve
+        type=str,
+        default='true',
+        metavar="N",
+        help="if the noise is constant in the training (default: %(default)s)",
+    )
+
     args = parser.parse_args()
     print("# Options")
     for key, value in sorted(vars(args).items()):
@@ -187,12 +204,18 @@ if __name__ == "__main__":
             mnist_train_loader,
             args.epochs,
             device,
+            args.noise
         )
-        
-        torch.save(
-            model.state_dict(),
-            f"{experiments_folder}/model.pt",
-        )
+        if args.noise == 'true':
+            torch.save(
+                model.state_dict(),
+                f"{experiments_folder}/model_seed{args.seed}.pt"
+            )
+        else:
+            torch.save(
+                model.state_dict(),
+                f"{experiments_folder}/model_seed{args.seed}_without_noise.pt"
+            )
 
     elif args.mode == "sample":
         model = VAE(
@@ -258,7 +281,7 @@ if __name__ == "__main__":
             GaussianDecoder(new_decoder(M)),
             GaussianEncoder(new_encoder(M)),
         ).to(device)
-        model.load_state_dict(torch.load(args.experiment_folder + "/model.pt", map_location=device))
+        model.load_state_dict(torch.load(args.experiment_folder + f"/model_seed{args.seed}.pt", map_location=device))
         model.eval()
         
         test_dataset = datasets.MNIST("data/", train=False, download=True, transform=transforms.ToTensor())
@@ -283,7 +306,13 @@ if __name__ == "__main__":
             GaussianDecoder(new_decoder(M)),
             GaussianEncoder(new_encoder(M)),
         ).to(device)
-        model.load_state_dict(torch.load(args.experiment_folder + "/model.pt"))
+
+        if args.noise == 'true':
+            model.load_state_dict(torch.load(args.experiment_folder + f"/model_seed{args.seed}.pt"))
+        else:
+            print('without_noise')
+            model.load_state_dict(torch.load(args.experiment_folder + f"/model_seed{args.seed}_without_noise.pt"))
+
         model.eval()
 
         # Data loading 
@@ -309,15 +338,28 @@ if __name__ == "__main__":
         distances = torch.zeros(linspace_points.shape[0])                                                               # placeholder for the calculated distances
         energies = torch.zeros(linspace_points.shape[0])  
         
-        for i in range(linspace_points.shape[0]):
-            optimized_points[i], distances[i], energies[i] = compute_geodesics(linspace_points[i], model, epochs=args.epochs_per_geodesic, patience=args.patience, epsilon=args.epsilon)
-
+        if args.optimizer == 'LBFGS':
+            for i in range(linspace_points.shape[0]):
+                optimized_points[i], distances[i], energies[i] = compute_geodesics_LBFGS(linspace_points[i], model, epochs=args.epochs_per_geodesic, patience=args.patience, epsilon=args.epsilon)
+        else:
+            print('ADAM!')
+            for i in range(linspace_points.shape[0]):
+                optimized_points[i], distances[i], energies[i] = compute_geodesics_Adam(linspace_points[i], model, epochs=args.epochs_per_geodesic, patience=args.patience, epsilon=args.epsilon)
+            
         # Save results to a text file
-        with open(f"optimize_folder/results_patience{args.patience}_seed{args.seed}_num_t{args.num_t}.txt", "w") as file:
-            file.write("Distances:\n")
-            file.write(str(distances) + "\n\n")
-            file.write("Energies:\n")
-            file.write(str(energies) + "\n")
+        if args.noise == 'true':
+            with open(f"optimize_folder/results_patience{args.patience}_seed{args.seed}_num_t{args.num_t}_opt{args.optimizer}_.txt", "w") as file:
+                file.write("Distances:\n")
+                file.write(str(distances) + "\n\n")
+                file.write("Energies:\n")
+                file.write(str(energies) + "\n")
 
-        plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs)
+        else:
+            with open(f"optimize_folder/results_patience{args.patience}_seed{args.seed}_num_t{args.num_t}_opt{args.optimizer}_without_noise.txt", "w") as file:
+                file.write("Distances:\n")
+                file.write(str(distances) + "\n\n")
+                file.write("Energies:\n")
+                file.write(str(energies) + "\n")
+
+        plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, args.num_pairs, args)
 
