@@ -276,7 +276,7 @@ if __name__ == "__main__":
             GaussianDecoder(new_decoder(M)),
             GaussianEncoder(new_encoder(M)),
         ).to(device)
-        model.load_state_dict(torch.load(args.experiment_folder + "/model.pt"))
+        model.load_state_dict(torch.load(args.experiment_folder + f"/model_seed{args.seed}.pt"))
         model.eval()
 
         # Data loading 
@@ -292,6 +292,8 @@ if __name__ == "__main__":
         points = np.hstack([selected_latent_codes[:args.num_pairs, :], selected_latent_codes[args.num_pairs:, :]])      # Shape: (args.num_pairs, 4)
         points = torch.tensor(points, dtype=torch.float32)  
         linspace_points = create_linspace(points, args.num_t)                                                           # get equal spaced points from the start to end position with args.num_t points
+        latent_distance = torch.norm(points, dim=1)
+        print(points)
 
         # Define empty tensors for book keeping
         optimized_points = torch.zeros_like(linspace_points)                                                            # placeholder for optimized results
@@ -307,7 +309,9 @@ if __name__ == "__main__":
         #     file.write("Distances:\n")
         #     file.write(str(distances) + "\n\n")
         #     file.write("Energies:\n")
-        #     file.write(str(energies) + "\n")
+        #     file.write(str(energies) + "\n\n")
+        #     file.write('Latent distances:\n')
+        #     file.write(str(latent_distance) +'\n\n')
 
         plot_latent_and_geodesic_piecewise(
             latent_codes, 

@@ -86,25 +86,25 @@ def plot_latent_and_geodesic_piecewise_old(latent_codes, labels, optimized_point
 
 #     return optimized_points, distances, energy
 
+
+def calculate_energy(x, decoder_net):
+        mean_distribution = decoder_net(x)
+        mean_diff = mean_distribution[:-1] - mean_distribution[1:]
+        norm = torch.norm(mean_diff, dim=(-1, -2))**2
+        energy = torch.sum(norm, dim=0)
+        return energy
+
 def compute_geodesics_Adam(linspace_points_path, model, epochs, lr):
     learnable_points = nn.Parameter(linspace_points_path[:, 1:-1].clone(), requires_grad=True)
     optimizer = torch.optim.Adam([learnable_points], lr=lr)
     decoder_net = model.decoder.decoder_net
 
-    best_energy = float('inf')
-    patience_counter = 0
-    
     print('start')
     for i in range(epochs):
         optimizer.zero_grad()
         x = torch.cat((linspace_points_path[:, 0][:, None], learnable_points, linspace_points_path[:, -1][:, None]), dim=1).T
-
-        # energy calculation
-        mean_distribution = decoder_net(x)
-        mean_diff = mean_distribution[:-1] - mean_distribution[1:]
-        norm = torch.norm(mean_diff, dim=(-1, -2))**2
-        energy = torch.sum(norm, dim=0)
-
+        
+        energy = calculate_energy(x, decoder_net)
         energy.backward()
         optimizer.step()
 
