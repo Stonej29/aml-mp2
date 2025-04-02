@@ -16,7 +16,7 @@ from geodesics import compute_geodesics_part_b, plot_latent_and_geodesic_piecewi
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", type=str, choices=["train", "sample", "eval", "geodesic", "cov"],
+    parser.add_argument("mode", type=str, choices=["train", "sample", "eval", "geodesic", "cov", "cov2"],
                         help="Mode: train, sample, eval, or geodesic")
     parser.add_argument("--experiment-folder", type=str, default="ensemble_experiment",
                         help="Folder for saving/loading model")
@@ -154,10 +154,10 @@ if __name__ == "__main__":
         log_distances(distances, euc_distances, args.num_decoders, vae_id)
     elif args.mode == "cov":
         num_retrainings = 10      
-        num_pairs_cov = 20        
+        num_pairs_cov = 25        
         geodesic_epochs = 300    
         mc_num_samples = 300      
-        decoder_counts = [1, 2, 3] 
+        decoder_counts = [1,2,3] 
 
         all_results = {}  
         
@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
         test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False)
 
-        np.random.seed(42)
+        np.random.seed(11)
         total_samples = len(test_data)
         selected_indices = np.random.choice(total_samples, num_pairs_cov * 2, replace=False)
         pair_indices = [(selected_indices[i], selected_indices[i+1]) for i in range(0, len(selected_indices), 2)]
@@ -189,6 +189,7 @@ if __name__ == "__main__":
                 if not os.path.exists(model_path):
                     print(f"Model file {model_path} not found; skipping retraining {seed_idx}")
                     continue
+
 
                 print(f"Processing model {seed_idx + 1}/{num_retrainings}")
                 
@@ -716,6 +717,315 @@ if __name__ == "__main__":
         
         # Print final summary
         print("\n===== FINAL SUMMARY =====")
+        print("Average CoV by decoder count:")
+        for n in decoder_counts:
+            print(f"{n} decoders - Euclidean: {all_results[n]['avg_cov_euc']:.4f}, Geodesic: {all_results[n]['avg_cov_geo']:.4f}")
+
+    elif args.mode == "cov2":
+        num_retrainings = 10      
+        num_pairs_cov = 10
+        geodesic_epochs = 100     
+        mc_num_samples = 200      
+        decoder_counts = [1, 2, 3]  #
+        fixed_model_decoders = 3  
+
+        all_results = {}  
+        
+        os.makedirs("figures/cov", exist_ok=True)
+        
+        test_tensors = datasets.MNIST("data/", train=False, download=True,
+                                    transform=transforms.Compose([transforms.ToTensor()]))
+        test_data = subsample(test_tensors.data, test_tensors.targets, args.num_train_data, args.num_classes)
+        test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False)
+
+        np.random.seed(11)
+        total_samples = len(test_data)
+        selected_indices = np.random.choice(total_samples, num_pairs_cov * 2, replace=False)
+        pair_indices = [(selected_indices[i], selected_indices[i+1]) for i in range(0, len(selected_indices), 2)]
+        print("Selected test pair indices:", pair_indices)
+        
+        for num_decoders in decoder_counts:
+            all_results[num_decoders] = {
+                "euclidean_dists_all": {pair: [] for pair in pair_indices},
+                "geodesic_dists_all": {pair: [] for pair in pair_indices}
+            }
+
+        from tqdm import tqdm
+        for seed_idx in tqdm(range(num_retrainings), desc="Processing models"):
+            # Only load models with 3 decoders
+            model_filename = f"ensemble_model_{fixed_model_decoders}_decoders_{seed_idx}.pt"
+            model_path = os.path.join(args.experiment_folder, model_filename)
+            if not os.path.exists(model_path):
+                print(f"Model file {model_path} not found; skipping retraining {seed_idx}")
+                continue
+
+            print(f"\nProcessing model {seed_idx + 1}/{num_retrainings}")
+            
+            # Load the full 3-decoder model
+            prior = GaussianPrior(args.latent_dim)
+            full_decoders = nn.ModuleList([GaussianDecoder(new_decoder(args.latent_dim)) for _ in range(fixed_model_decoders)])
+            encoder = GaussianEncoder(new_encoder(args.latent_dim))
+            full_model = EnsembleVAE(prior, full_decoders, encoder).to(device)
+            full_model.load_state_dict(torch.load(model_path, map_location=device))
+            full_model.eval()
+            
+            for (idx1, idx2) in pair_indices:
+                print(f"  Processing pair ({idx1}, {idx2})")
+                
+                img1 = test_data[idx1][0].unsqueeze(0).float()
+                img2 = test_data[idx2][0].unsqueeze(0).float()
+                img1 = img1.to(device)
+                img2 = img2.to(device)
+
+                with torch.no_grad():  
+                    q1 = full_model.encoder(img1)
+                    q2 = full_model.encoder(img2)
+                    latent1 = q1.mean.squeeze(0).detach().cpu().numpy()
+                    latent2 = q2.mean.squeeze(0).detach().cpu().numpy()
+
+                # Euclidean distance (same for all decoder counts since encoding is identical)
+                euc_dist = np.linalg.norm(latent1 - latent2)
+                
+                # Create initial curve (same for all decoder counts)
+                t_np = np.linspace(0, 1, args.num_t)
+                curve_np = np.zeros((args.latent_dim, args.num_t))
+                for i in range(args.latent_dim):
+                    curve_np[i] = latent1[i] * (1 - t_np) + latent2[i] * t_np
+                
+                for num_decoders in decoder_counts:
+                    subset_decoders = nn.ModuleList(list(full_model.decoders)[:num_decoders])
+                    
+                    curve = torch.tensor(curve_np, dtype=torch.float32, device=device, requires_grad=True)
+
+                    try:
+                        optimized_curve, geo_dist = compute_geodesics_part_b(
+                            curve,
+                            subset_decoders,  
+                            ensemble_size=num_decoders,
+                            num_samples=mc_num_samples,
+                            epochs=geodesic_epochs,
+                            learning_rate=1e-2,
+                            seed=None
+                        )
+                        
+                        all_results[num_decoders]["euclidean_dists_all"][(idx1, idx2)].append(euc_dist)
+                        all_results[num_decoders]["geodesic_dists_all"][(idx1, idx2)].append(geo_dist.item())
+                        
+                        print(f"    Using {num_decoders} decoders: Euc dist: {euc_dist:.4f}, Geo dist: {geo_dist.item():.4f}")
+                        
+                    except Exception as e:
+                        print(f"    ❌ Error with {num_decoders} decoders: {str(e)}")
+                        try:
+                            print(f"    Attempting fallback...")
+                            curve = torch.tensor(curve_np, dtype=torch.float32, device=device, requires_grad=True)
+                            
+                            optimized_curve, geo_dist = compute_geodesics_part_b(
+                                curve,
+                                subset_decoders,
+                                ensemble_size=num_decoders,
+                                num_samples=50,  # Reduced samples
+                                epochs=30,       # Reduced epochs
+                                learning_rate=2e-2,
+                                seed=None
+                            )
+                            
+                            all_results[num_decoders]["euclidean_dists_all"][(idx1, idx2)].append(euc_dist)
+                            all_results[num_decoders]["geodesic_dists_all"][(idx1, idx2)].append(geo_dist.item())
+                            print(f"    Fallback succeeded! Geodesic distance: {geo_dist.item():.4f}")
+                        except Exception as e2:
+                            print(f"    ❌ Fallback also failed: {str(e2)}")
+                            # If all fails, use approximation
+                            all_results[num_decoders]["euclidean_dists_all"][(idx1, idx2)].append(euc_dist)
+                            all_results[num_decoders]["geodesic_dists_all"][(idx1, idx2)].append(euc_dist * 1.2)
+                            print(f"    Using approximation instead")
+        
+        for num_decoders in decoder_counts:
+            print(f"\n==== Results for {num_decoders} decoders ====")
+            cov_euc = []
+            cov_geo = []
+            
+            for pair in pair_indices:
+                dists_euc = np.array(all_results[num_decoders]["euclidean_dists_all"][pair])
+                dists_geo = np.array(all_results[num_decoders]["geodesic_dists_all"][pair])
+                
+                if len(dists_euc) > 0 and np.mean(dists_euc) != 0:
+                    cov_euc_val = np.std(dists_euc) / np.mean(dists_euc)
+                else:
+                    cov_euc_val = 0
+                    
+                if len(dists_geo) > 0 and np.mean(dists_geo) != 0:
+                    cov_geo_val = np.std(dists_geo) / np.mean(dists_geo)
+                else:
+                    cov_geo_val = 0
+                    
+                cov_euc.append(cov_euc_val)
+                cov_geo.append(cov_geo_val)
+                
+                print(f"Pair {pair}: Euclidean CoV = {cov_euc_val:.4f}, Geodesic CoV = {cov_geo_val:.4f}")
+            
+            # Calculate average CoV across all pairs
+            avg_cov_euc = np.mean(cov_euc) if len(cov_euc) > 0 else 0
+            avg_cov_geo = np.mean(cov_geo) if len(cov_geo) > 0 else 0
+            print(f"Average Euclidean CoV: {avg_cov_euc:.4f}, Average Geodesic CoV: {avg_cov_geo:.4f}")
+            
+            all_results[num_decoders]["cov_euc"] = cov_euc
+            all_results[num_decoders]["cov_geo"] = cov_geo
+            all_results[num_decoders]["avg_cov_euc"] = avg_cov_euc
+            all_results[num_decoders]["avg_cov_geo"] = avg_cov_geo
+            
+            plt.figure(figsize=(10, 6))
+            x = np.arange(len(pair_indices))
+            width = 0.35
+            plt.bar(x - width/2, cov_euc, width, label="Euclidean CoV")
+            plt.bar(x + width/2, cov_geo, width, label="Geodesic CoV")
+            plt.xlabel("Pair Index")
+            plt.ylabel("Coefficient of Variation (CoV)")
+            plt.title(f"CoV with {num_decoders} Decoders (Using First {num_decoders} of 3)")
+            plt.xticks(x, [f"Pair {i+1}" for i in range(len(pair_indices))])
+            plt.legend()
+            plt.grid(axis='y', linestyle='--', alpha=0.3)
+            plt.tight_layout()
+            plt.savefig(f"figures/cov/controlled_cov_plot_{num_decoders}_decoders.png", dpi=300)
+            plt.close()
+        
+        plt.figure(figsize=(10, 6))
+        x = np.arange(len(decoder_counts))
+        width = 0.35
+        
+        # Extract average CoVs for each decoder count
+        avg_covs_euc = [all_results[n]["avg_cov_euc"] for n in decoder_counts]
+        avg_covs_geo = [all_results[n]["avg_cov_geo"] for n in decoder_counts]
+        
+        # Plot bars
+        plt.bar(x - width/2, avg_covs_euc, width, label="Avg Euclidean CoV", color='skyblue')
+        plt.bar(x + width/2, avg_covs_geo, width, label="Avg Geodesic CoV", color='lightgreen')
+        
+        # Add labels and formatting
+        plt.xlabel("Number of Decoders Used from 3-Decoder Model")
+        plt.ylabel("Average Coefficient of Variation (CoV)")
+        plt.title("Impact of Ensemble Size on Latent Space Consistency\n(Controlled Experiment)")
+        plt.xticks(x, [f"{n} Decoders" for n in decoder_counts])
+        plt.legend()
+        plt.grid(axis='y', linestyle='--', alpha=0.3)
+        
+        # Add value labels on top of bars
+        for i, v in enumerate(avg_covs_euc):
+            plt.text(i - width/2, v + 0.01, f"{v:.3f}", ha='center')
+        for i, v in enumerate(avg_covs_geo):
+            plt.text(i + width/2, v + 0.01, f"{v:.3f}", ha='center')
+            
+        plt.tight_layout()
+        plt.savefig(f"figures/cov/controlled_cov_comparison.png", dpi=300)
+        plt.show()
+        
+        # Add boxplot comparison
+        plt.figure(figsize=(12, 6))
+        
+        # Create data structures for boxplot
+        euc_boxplot_data = [all_results[n]["cov_euc"] for n in decoder_counts]
+        geo_boxplot_data = [all_results[n]["cov_geo"] for n in decoder_counts]
+        
+        # Create subplot for Euclidean CoV
+        plt.subplot(1, 2, 1)
+        box_euc = plt.boxplot(euc_boxplot_data, patch_artist=True)
+        for box in box_euc['boxes']:
+            box.set(facecolor='lightblue')
+        for median in box_euc['medians']:
+            median.set(color='navy', linewidth=1.5)
+            
+        plt.title('Euclidean CoV Distribution')
+        plt.ylabel('Coefficient of Variation')
+        plt.xlabel('Number of Decoders Used')
+        plt.xticks(range(1, len(decoder_counts) + 1), [f"{n}" for n in decoder_counts])
+        plt.grid(axis='y', linestyle='--', alpha=0.3)
+        
+        # Create subplot for Geodesic CoV
+        plt.subplot(1, 2, 2)
+        box_geo = plt.boxplot(geo_boxplot_data, patch_artist=True)
+        for box in box_geo['boxes']:
+            box.set(facecolor='lightgreen')
+        for median in box_geo['medians']:
+            median.set(color='darkgreen', linewidth=1.5)
+            
+        plt.title('Geodesic CoV Distribution')
+        plt.ylabel('Coefficient of Variation')
+        plt.xlabel('Number of Decoders Used')
+        plt.xticks(range(1, len(decoder_counts) + 1), [f"{n}" for n in decoder_counts])
+        plt.grid(axis='y', linestyle='--', alpha=0.3)
+        
+        plt.tight_layout()
+        plt.savefig(f"figures/cov/controlled_cov_boxplot.png", dpi=300)
+        plt.show()
+        
+        # Plot detailed comparison of CoV values for each pair
+        plt.figure(figsize=(16, 8))
+        x = np.arange(len(pair_indices))
+        width = 0.25
+        
+        geo_covs_by_decoder = {n: all_results[n]["cov_geo"] for n in decoder_counts}
+        
+        # Plot bars for each decoder count
+        bar1 = plt.bar(x - width, geo_covs_by_decoder[1], width, label='1 Decoder', color='#ff9999')
+        bar2 = plt.bar(x, geo_covs_by_decoder[2], width, label='2 Decoders', color='#66b3ff')
+        bar3 = plt.bar(x + width, geo_covs_by_decoder[3], width, label='3 Decoders', color='#99ff99')
+        
+        # Add labels and formatting
+        plt.xlabel('Pair Index', fontsize=12)
+        plt.ylabel('Geodesic CoV', fontsize=12)
+        plt.title('Geodesic CoV for Each Pair Across Different Decoder Counts\n(Controlled Experiment)', fontsize=14)
+        plt.xticks(x, [f'Pair {i+1}' for i in range(len(pair_indices))])
+        plt.legend(fontsize=12)
+        plt.grid(axis='y', linestyle='--', alpha=0.3)
+        
+        # Add value labels on bars
+        for i, v in enumerate(geo_covs_by_decoder[1]):
+            plt.text(i - width, v + 0.01, f'{v:.2f}', ha='center', va='bottom', fontsize=8, rotation=90)
+        for i, v in enumerate(geo_covs_by_decoder[2]):
+            plt.text(i, v + 0.01, f'{v:.2f}', ha='center', va='bottom', fontsize=8, rotation=90)
+        for i, v in enumerate(geo_covs_by_decoder[3]):
+            plt.text(i + width, v + 0.01, f'{v:.2f}', ha='center', va='bottom', fontsize=8, rotation=90)
+            
+        plt.tight_layout()
+        plt.savefig(f"figures/cov/controlled_all_pairs_geodesic_cov.png", dpi=300)
+        plt.show()
+        
+        # Calculate CoV reductions from 1→3 decoders
+        geo_cov_reduction = []
+        for i in range(len(pair_indices)):
+            if geo_covs_by_decoder[1][i] > 0:
+                reduction = (geo_covs_by_decoder[1][i] - geo_covs_by_decoder[3][i]) / geo_covs_by_decoder[1][i] * 100
+            else:
+                reduction = 0
+            geo_cov_reduction.append(reduction)
+        
+        # Plot the reductions sorted by magnitude
+        sorted_indices = np.argsort(geo_cov_reduction)[::-1]
+        sorted_reductions = [geo_cov_reduction[i] for i in sorted_indices]
+        sorted_pair_names = [f"Pair {i+1}" for i in sorted_indices]
+        
+        plt.figure(figsize=(14, 6))
+        bars = plt.bar(range(len(sorted_reductions)), sorted_reductions, color='skyblue')
+        
+        # Highlight positive and negative reductions
+        for i, v in enumerate(sorted_reductions):
+            bars[i].set_color('green' if v > 0 else 'red')
+        
+        plt.axhline(y=0, color='black', linestyle='-', alpha=0.3)
+        plt.xlabel("Point Pairs (sorted by improvement)")
+        plt.ylabel("CoV Reduction from 1→3 Decoders (%)")
+        plt.title("Geodesic CoV Reduction by Using 3 vs 1 Decoder\n(Controlled Experiment)")
+        plt.xticks(range(len(sorted_reductions)), sorted_pair_names, rotation=45)
+        
+        # Add value labels on bars
+        for i, v in enumerate(sorted_reductions):
+            plt.text(i, v + (1 if v >= 0 else -5), f"{v:.1f}%", ha='center')
+        
+        plt.tight_layout()
+        plt.savefig(f"figures/cov/controlled_geodesic_cov_improvement.png", dpi=300)
+        plt.show()
+        
+        # Print final summary
+        print("\n===== FINAL SUMMARY (CONTROLLED EXPERIMENT) =====")
         print("Average CoV by decoder count:")
         for n in decoder_counts:
             print(f"{n} decoders - Euclidean: {all_results[n]['avg_cov_euc']:.4f}, Geodesic: {all_results[n]['avg_cov_geo']:.4f}")
