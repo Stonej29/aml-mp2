@@ -392,16 +392,19 @@ def plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, l
     plt.plot([], [], '--', color='black', linewidth=1.5, label='Euclidean Path')
     plt.plot([], [], 'o', color='black', markersize=8, markerfacecolor='lightgray', markeredgecolor='black', label='Start/End Points')
     
-    plt.title(title, fontsize=16)
-    plt.xlabel('z1', fontsize=14)
-    plt.ylabel('z2', fontsize=14)
+    plt.title(title, fontsize=34)  #16
+    plt.xlabel('z1', fontsize=28)   #14
+    plt.ylabel('z2', fontsize=28)   #14
+    plt.xticks(fontsize=22)  # Increase this value to make the x-axis tick labels larger
+    plt.yticks(fontsize=22)  # Increase this value to make the y-axis tick labels larger
+
     
-    plt.legend(loc='upper right', fontsize=10)
+    plt.legend(loc='lower left', fontsize=16)
     
     plt.tight_layout()
     
     os.makedirs("figures/png/geod", exist_ok=True)
     os.makedirs("figures/svg/geod", exist_ok=True)
     plt.savefig(f"figures/png/geod/{title}.png", dpi=300)
-    plt.savefig(f"figures/svg/geod/{title}.svg")
+    plt.savefig(f"figures/svg/geod/{title}.pdf")
     plt.show()
