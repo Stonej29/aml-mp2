@@ -298,7 +298,7 @@ if __name__ == "__main__":
 
         random_indices = np.random.choice(len(latent_codes), args.num_pairs * 2, replace=False)
 
-        selected_latent_codes = latent_codes[random_indices] # Shape: (50, 2)
+        selected_latent_codes = latent_codes[random_indices] # Shape: (2*args.num_pairs, 2)
         points = np.hstack([selected_latent_codes[:args.num_pairs, :], selected_latent_codes[args.num_pairs:, :]])  # Shape: (args.num_pairs, 4)
         points = torch.tensor(points, dtype=torch.float32)  
 
@@ -313,6 +313,7 @@ if __name__ == "__main__":
             optimized_points[i], distances[i], energies[i] = compute_geodesics(linspace_points[i], model, epochs=args.epochs_per_geodesic, patience=args.patience, epsilon=args.epsilon)
 
         # Save results to a text file
+        os.makedirs('optimize_folder', exist_ok=True)
         with open(f"optimize_folder/results_patience{args.patience}_seed{args.seed}_num_t{args.num_t}.txt", "w") as file:
             file.write("Distances:\n")
             file.write(str(distances) + "\n\n")
