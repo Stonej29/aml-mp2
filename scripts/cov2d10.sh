@@ -12,7 +12,6 @@
 #BSUB -o job_logs/cov2d10_%J_%I.out
 #BSUB -e job_logs/cov2d10_%J_%I.err
 
-# Set shared arguments
 EXPERIMENT_FOLDER="ensemble_experiment"
 DEVICE="cuda"
 NUM_PAIRS=10
@@ -26,8 +25,6 @@ source temp_env/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# Loop over decoder counts
-# Run 10 times for each decoder count
 for RUN_ID in {1..10}
 do
 MODEL_NAME="ensemble_model_2_decoders"
