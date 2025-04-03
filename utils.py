@@ -143,7 +143,6 @@ if __name__ == "__main__":
     #euclidean_cov = [0.1679, 0.1679, 0.1679]
     #geodesic_cov = [0.1688, 0.1644, 0.1639]
 
-
     euclidean_cov = [0.2246, 0.2246, 0.2246]
     geodesic_cov = [0.2227, 0.1917, 0.1840]
 

@@ -4,87 +4,7 @@ import numpy as np
 import torch.nn as nn
 import os
 
-import os
 import matplotlib.patheffects as pe  
-
-
-
-def plot_latent_and_geodesic_piecewise_old(latent_codes, labels, optimized_points, linspace_points, num_classes, num_pairs):
-    plt.figure(figsize=(8, 8))
-    colors = [
-        "black", "red", "blue", "green", "darkorange", "purple", "cyan", "magenta", 
-        "brown", "yellow", "darkgreen", "lime", "teal", "navy", "pink", "gold", 
-        "orangered", "violet", "darkslategray", "mediumspringgreen", "cornflowerblue", 
-        "hotpink"
-
-    ]
-    colors = plt.cm.tab20(np.linspace(0, 1, num_pairs))
-
-    with torch.no_grad():
-        op_np = optimized_points.numpy()  
-        lp_np = linspace_points.numpy()
-
-        plt.figure()
-
-        plt.scatter(latent_codes[:, 0], latent_codes[:, 1], s=1, c=labels, alpha=0.5)
-        for i in range(op_np.shape[0]):
-            color = colors[i]
-            plt.plot((op_np[i, 0, 0], op_np[i, 0, -1]), (op_np[i, -1, 0], op_np[i, -1, -1]), 'o', color=color)  # Plot the start and end points
-            plt.plot(op_np[i, 0, :], op_np[i, -1, :], '-', color=color)
-            plt.plot(lp_np[i, 0, :], lp_np[i, -1, :], '--', color=color)
-                
-        plt.legend(title="Digits", loc='upper center', bbox_to_anchor=(0.5, -0.08), ncol=min(5, num_classes), fontsize=10)
-        plt.savefig(f'test.png', bbox_inches='tight', dpi=300)
-        plt.show()
-
-# def compute_geodesics(linspace_points_path,  model, epochs, patience=10, epsilon=1e-5):
-#     learnable_points = nn.Parameter(linspace_points_path[:, 1:-1].clone(), requires_grad = True)
-#     optimizer = torch.optim.LBFGS([learnable_points], lr=0.01, max_iter=20, history_size=10)                         
-#     decoder_net = model.decoder.decoder_net
-    
-#     best_energy = float('inf')
-#     patience_counter = 0
-
-#     def closure():
-#         optimizer.zero_grad()
-#         x = torch.cat(( linspace_points_path[:, 0][:, None], learnable_points, linspace_points_path[:, -1][:, None]), dim=1).T  # shape: (num_t, M) concatenate the first and last point to the learnable points and transpose to match the decoders input
-
-#         mean_distribution = decoder_net(x) 
-#         mean_diff = mean_distribution[:-1] - mean_distribution[1:]                                                           # shape: (num_t-1, 1, 28, 28) calculate the difference 
-#         norm = torch.norm(mean_diff, dim=(-1, -2))**2                                                                       # shape: (num_t-1, 1) calculate the squared norm for each latent variable
-#         energy = torch.sum(norm, dim=0)                                                                                 # shape: (1,) the sum across the num_t-1 
-
-#         energy.backward()  
-
-#         return energy
-
-#     # Optimize using LBFGS with early stopping
-#     print('start')
-#     for i in range(epochs):
-#             optimizer.step(closure)
-#             current_energy = closure().item()
-
-#             if i % 10 == 0:
-#                 print(f"Epoch: {i}, Energy: {current_energy}")
-
-#             # Check for improvement
-#             if current_energy < best_energy - epsilon:
-#                 best_energy = current_energy
-#                 patience_counter = 0
-#             else:
-#                 patience_counter += 1
-
-#             # Early stopping condition
-#             if patience_counter >= patience:
-#                 print(f"Early stopping at epoch {i}")
-#                 break
-
-#     optimized_points = torch.cat((linspace_points_path[:, 0][:, None], learnable_points, linspace_points_path[:, -1][:, None]), dim=1)  # shape: (num_pairs, M, num_t) save the optimized points for plotting pater
-#     diffs = optimized_points[:, 1:] - optimized_points[:, :-1]                                                                          # Compute differences between points
-#     distances = torch.norm(diffs, dim=0).sum()                                                                                          # Compute and sum Euclidean distances
-#     energy = torch.tensor(current_energy)
-
-#     return optimized_points, distances, energy
 
 
 def calculate_energy(x, decoder_net):
@@ -97,7 +17,8 @@ def calculate_energy(x, decoder_net):
 def compute_geodesics_Adam(linspace_points_path, model, epochs, lr):
     learnable_points = nn.Parameter(linspace_points_path[:, 1:-1].clone(), requires_grad=True)
     optimizer = torch.optim.Adam([learnable_points], lr=lr)
-    decoder_net = model.decoder.decoder_net
+    #decoder_net = model.decoder.decoder_net
+    decoder_net = model.decoders[0].decoder_net
 
     print('start')
     for i in range(epochs):
@@ -134,7 +55,7 @@ def compute_geodesics_part_b(linspace_points_path, decoders, ensemble_size,
 
         
         # MONTE CARLO APPROXIMATION 
-        energy = monte_carlo_energy_vectorized(x, decoders, ensemble_size, num_samples, seed)                                              # calculate the energy of the curve using the ensemble energy function
+        energy = monte_carlo_energy_vectorized(x, decoders, ensemble_size, num_samples)                                              # calculate the energy of the curve using the ensemble energy function
         energy.backward()
         
         optimizer.step()
@@ -206,7 +127,7 @@ def monte_carlo_ensamble_part_b(curve, decoders, ensemble_size, num_samples=200,
     
     return total_energy
 
-def monte_carlo_energy_vectorized(curve, decoders, ensemble_size, num_samples=200, seed=None):
+def monte_carlo_energy_vectorized(curve, decoders, ensemble_size, num_samples=200):
     """
     Ultimate vectorized implementation of Monte Carlo energy computation
     with fixed random seeding for stable optimization.
@@ -230,13 +151,6 @@ def monte_carlo_energy_vectorized(curve, decoders, ensemble_size, num_samples=20
         The estimated energy of the curve
     """
     # Save and set random seed if provided
-    if seed is not None:
-        rng_state = torch.get_rng_state()
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            cuda_rng_state = torch.cuda.get_rng_state()
-            torch.cuda.manual_seed(seed)
-
     # Limit to available decoders
     ensemble_size = min(ensemble_size, len(decoders))
     selected_decoders = decoders[:ensemble_size]
@@ -248,12 +162,6 @@ def monte_carlo_energy_vectorized(curve, decoders, ensemble_size, num_samples=20
     l_indices = torch.randint(0, ensemble_size, (N, num_samples))
     k_indices = torch.randint(0, ensemble_size, (N, num_samples))
     
-        # Restore RNG state to avoid affecting global state
-    if seed is not None:
-        torch.set_rng_state(rng_state)
-        if torch.cuda.is_available():
-            torch.cuda.set_rng_state(cuda_rng_state)
-
     # Prepare batched points
     all_points = curve.transpose(0, 1)  # Shape: (num_points, latent_dim)
 
@@ -284,41 +192,6 @@ def monte_carlo_energy_vectorized(curve, decoders, ensemble_size, num_samples=20
 
     total_energy = torch.sum(segment_energies)
     return total_energy
-
-
-
-def plot_latent_and_geodesic_piecewise_part_b(latent_codes, labels, optimized_points, linspace_points, num_classes, num_pairs):
-    plt.figure(figsize=(8, 8))
-    colors = [
-        "black", "red", "blue", "green", "darkorange", "purple", "cyan", "magenta", 
-        "brown", "yellow", "darkgreen", "lime", "teal", "navy", "pink", "gold", 
-        "orangered", "violet", "darkslategray", "mediumspringgreen", "cornflowerblue", 
-        "hotpink"
-
-    ]
-    colors = plt.cm.tab20(np.linspace(0, 1, num_pairs))
-
-    with torch.no_grad():
-        op_np = optimized_points.detach().cpu().numpy()
-        lp_np = linspace_points.detach().cpu().numpy()
-        
-    plt.figure()
-
-    plt.scatter(latent_codes[:, 0], latent_codes[:, 1], s=1, c=labels, alpha=0.5)
-    for i in range(op_np.shape[0]):
-        color = colors[i]
-        plt.plot((op_np[i, 0, 0], op_np[i, 0, -1]), (op_np[i, -1, 0], op_np[i, -1, -1]), 'o', color=color)  # Plot the start and end points
-        plt.plot(op_np[i, 0, :], op_np[i, -1, :], '-', color=color)
-        plt.plot(lp_np[i, 0, :], lp_np[i, -1, :], '--', color=color)
-
-    plt.title("Ensemble Geodesics in Latent Space")
-    plt.xlabel("z1")
-    plt.ylabel("z2")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig("figures/png/geod/ensemble_geodesics_piecewise.png", dpi=300)
-    plt.savefig("figures/svg/geod/ensemble_geodesics_piecewise.svg", dpi=300)
-    plt.close()
 
 
 def plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, linspace_points, num_classes, num_pairs, title="Geodesics in Latent Space"):
@@ -392,9 +265,9 @@ def plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, l
     plt.plot([], [], '--', color='black', linewidth=1.5, label='Euclidean Path')
     plt.plot([], [], 'o', color='black', markersize=8, markerfacecolor='lightgray', markeredgecolor='black', label='Start/End Points')
     
-    plt.title(title, fontsize=34)  #16
-    plt.xlabel('z1', fontsize=28)   #14
-    plt.ylabel('z2', fontsize=28)   #14
+    plt.title(title, fontsize=28)  #16
+    plt.xlabel('z1', fontsize=23)   #14
+    plt.ylabel('z2', fontsize=23)   #14
     plt.xticks(fontsize=22)  # Increase this value to make the x-axis tick labels larger
     plt.yticks(fontsize=22)  # Increase this value to make the y-axis tick labels larger
 
@@ -407,4 +280,109 @@ def plot_latent_and_geodesic_piecewise(latent_codes, labels, optimized_points, l
     os.makedirs("figures/svg/geod", exist_ok=True)
     plt.savefig(f"figures/png/geod/{title}.png", dpi=300)
     plt.savefig(f"figures/svg/geod/{title}.pdf")
+    plt.show()
+
+def plot_latent_with_decoder_uncertainty(model, latent_codes, labels, optimized_points, linspace_points, 
+                                         num_classes, num_pairs, grid_size=40, title=None):
+    plt.figure(figsize=(10, 10))
+    
+    class_colors = ['#1f77b4', '#ff7f0e', '#2ca02c']
+    geodesic_colors = plt.cm.Set1(np.linspace(0, 1, num_pairs))
+    
+    op_np = optimized_points.detach().cpu().numpy() if torch.is_tensor(optimized_points) else optimized_points.numpy()
+    lp_np = linspace_points.detach().cpu().numpy() if torch.is_tensor(linspace_points) else linspace_points.numpy()
+    
+    margin = 0.5
+    x_min, x_max = latent_codes[:, 0].min() - margin, latent_codes[:, 0].max() + margin
+    y_min, y_max = latent_codes[:, 1].min() - margin, latent_codes[:, 1].max() + margin
+    
+    x_grid = np.linspace(x_min, x_max, grid_size)
+    y_grid = np.linspace(y_min, y_max, grid_size)
+    X, Y = np.meshgrid(x_grid, y_grid)
+    
+    std_devs = np.zeros((grid_size, grid_size))
+    
+    model.eval()
+    with torch.no_grad():
+        for i in range(grid_size):
+            if i % 10 == 0:
+                print(f"Processing grid row {i}/{grid_size}")
+            for j in range(grid_size):
+                z = torch.tensor([[X[i, j], Y[i, j]]], dtype=torch.float32).to(model.decoders[0].decoder_net[0].weight.device)
+                
+                outputs = []
+                for decoder in model.decoders:
+                    out = decoder(z).mean
+                    outputs.append(out.view(out.size(0), -1))
+                
+                stacked_outputs = torch.stack(outputs, dim=0)
+                pixel_std = torch.std(stacked_outputs, dim=0)
+                
+                std_devs[i, j] = torch.mean(pixel_std).item()
+    
+    std_devs_normalized = (std_devs - std_devs.min()) / (std_devs.max() - std_devs.min() + 1e-8)
+    std_devs_enhanced = np.power(std_devs_normalized, 0.5)  # Square root transformation enhances contrast
+    
+    plt.pcolormesh(X, Y, std_devs_enhanced, cmap='magma', alpha=0.9, shading='auto')
+    cbar = plt.colorbar()
+    cbar.set_label('Decoder Uncertainty (Std Dev)', fontsize=16)  # Increase font size here
+    cbar.ax.tick_params(labelsize=12)
+    
+    for i in range(num_classes):
+        class_mask = labels == i
+        plt.scatter(latent_codes[class_mask, 0], latent_codes[class_mask, 1], 
+                   s=5, c=[class_colors[i]], alpha=0.7, label=f'Class {i}')
+    
+    for i in range(op_np.shape[0]):
+        color = geodesic_colors[i % len(geodesic_colors)]
+        
+        start_point = op_np[i, :, 0]
+        end_point = op_np[i, :, -1]
+        
+        dists_start = np.sum((latent_codes - start_point)**2, axis=1)
+        dists_end = np.sum((latent_codes - end_point)**2, axis=1)
+        start_class = labels[np.argmin(dists_start)]
+        end_class = labels[np.argmin(dists_end)]
+        
+        plt.scatter([start_point[0], end_point[0]], 
+                    [start_point[1], end_point[1]], 
+                    s=100, 
+                    c=[class_colors[int(start_class) % len(class_colors)], 
+                       class_colors[int(end_class) % len(class_colors)]],
+                    edgecolors='black', 
+                    linewidths=1.5, 
+                    zorder=5)
+        
+        plt.plot(op_np[i, 0, :], op_np[i, 1, :], '-', 
+                 color=color, linewidth=2.5, zorder=4,
+                 path_effects=[pe.Stroke(linewidth=4, foreground='black'), pe.Normal()])
+        
+        plt.plot(lp_np[i, 0, :], lp_np[i, 1, :], '--', 
+                 color=color, linewidth=1.5, alpha=0.8, zorder=3)
+    
+    plt.plot([], [], '-', color='black', linewidth=2, label='Geodesic Path')
+    plt.plot([], [], '--', color='black', linewidth=1.5, label='Euclidean Path')
+    plt.plot([], [], 'o', color='black', markersize=8, markerfacecolor='lightgray', markeredgecolor='black', label='Start/End Points')
+    
+    if title:
+        plt.title(title, fontsize=34)
+    else:
+        plt.title("Latent Space with Decoder Uncertainty", fontsize=34)
+    
+    plt.xlabel('z1', fontsize=28)
+    plt.ylabel('z2', fontsize=28)
+    plt.xticks(fontsize=22)
+    plt.yticks(fontsize=22)
+    plt.legend(loc='lower left', fontsize=16)
+    
+    plt.tight_layout()
+    
+    os.makedirs("figures/png/geod", exist_ok=True)
+    os.makedirs("figures/svg/geod", exist_ok=True)
+    
+    save_title = title if title else "latent_space_with_uncertainty"
+    save_title = save_title.replace(" ", "_").lower()
+    
+    plt.savefig(f"figures/png/geod/{save_title}.png", dpi=300)
+    plt.savefig(f"figures/svg/geod/{save_title}.pdf")
     plt.show()
