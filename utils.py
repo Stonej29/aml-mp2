@@ -2,6 +2,7 @@ import torch
 from tqdm import tqdm
 import pandas as pd
 import os
+import matplotlib.pyplot as plt
 
 def train(model, optimizer, data_loader, epochs, device):
     """Train a VAE model."""
@@ -107,3 +108,43 @@ def log_distances(distances, euc_distances, num_decoders, vae_id, output_path="d
         df.to_csv(str(len(distances)) + output_path, mode='a', header=False, index=False)
     else:
         df.to_csv(str(len(distances)) + output_path, index=False)
+
+
+def plot_cov_comparison(decoders, euclidean_cov, geodesic_cov):
+    # Create the plot
+    plt.figure(figsize=(8, 6))
+    # Nice colors be special and dont use the default ones
+
+    colors = ['#ed0036', '#0088ed']
+
+    plt.plot(decoders, euclidean_cov, marker='o', linestyle='-', label='Euclidean CoV', color=colors[1])
+    plt.plot(decoders, geodesic_cov, marker='s', linestyle='-', label='Geodesic CoV', color=colors[0])
+
+    # Labels and title
+    plt.xlabel('Number of Decoders', fontsize=23)
+
+    plt.ylabel('Coefficient of Variation (CoV)', fontsize=23)
+    plt.title('CoV across Different Decoders', fontsize=28)
+    plt.xticks(decoders, fontsize=22)
+    plt.yticks(fontsize=22)
+    plt.grid(True)
+    plt.legend(fontsize=16)
+    plt.tight_layout()
+
+
+    # Display the plot
+    plt.savefig("cov_comparison.png")
+    plt.savefig("cov_comparison.pdf")
+    plt.show()
+
+if __name__ == "__main__":
+    # Example usage
+    decoders = [1, 2, 3]
+    #euclidean_cov = [0.1679, 0.1679, 0.1679]
+    #geodesic_cov = [0.1688, 0.1644, 0.1639]
+
+
+    euclidean_cov = [0.2246, 0.2246, 0.2246]
+    geodesic_cov = [0.2227, 0.1917, 0.1840]
+
+    plot_cov_comparison(decoders, euclidean_cov, geodesic_cov)
