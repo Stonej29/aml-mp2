@@ -1,4 +1,4 @@
-# Mini-project 1 - Advanced Machine Learning (02460)
+# Mini-project 2 - Advanced Machine Learning (02460)
 
 This repository contains the code and report for Mini-project 2 in Advanced Machine Learning at DTU. In the project we compare various self-implemented deep generative models using the MNIST dataset.
 
